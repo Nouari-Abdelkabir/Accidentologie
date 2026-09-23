@@ -349,12 +349,76 @@ function getPkRange(troncon) {
     return ranges[troncon] || 'Inconnu';
 }
 
-function determinerSociete(pk) {
+function determinerSociete(pk, axe, dateAccident) {
     if (pk === null || pk === undefined || isNaN(pk)) return 'Inconnue';
+    
     const pkNum = Number(pk);
-    for (const [nom, s] of Object.entries(SOCIETES_DEPANNAGE)) {
-        if (pkNum >= s.min && pkNum <= s.max) return nom;
+    
+    // ✅ Récupérer les sociétés depuis localStorage (avec dates)
+    let societes = [];
+    try {
+        const data = localStorage.getItem('config_societes');
+        if (data) {
+            societes = JSON.parse(data);
+        }
+    } catch(e) {}
+    
+    // ✅ Si vide, utiliser SOCIETES_DEPANNAGE global (fallback)
+    if (societes.length === 0) {
+        for (const [nom, s] of Object.entries(SOCIETES_DEPANNAGE)) {
+            if (pkNum >= s.min && pkNum <= s.max) return nom;
+        }
+        return 'Inconnue';
     }
+    
+    // ✅ Convertir la date de l'accident en objet Date
+    let dateAccidentObj = null;
+    if (dateAccident) {
+        if (typeof dateAccident === 'number') {
+            // Excel serial number
+            dateAccidentObj = new Date((dateAccident - 25569) * 86400 * 1000);
+        } else if (typeof dateAccident === 'string') {
+            // Format "DD/MM/YYYY" ou "DD-MM-YYYY"
+            let match = dateAccident.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+            if (match) {
+                dateAccidentObj = new Date(
+                    parseInt(match[3]), 
+                    parseInt(match[2]) - 1, 
+                    parseInt(match[1])
+                );
+            } else {
+                dateAccidentObj = new Date(dateAccident);
+            }
+        } else if (dateAccident instanceof Date) {
+            dateAccidentObj = dateAccident;
+        }
+    }
+    
+    // ✅ Chercher la société correspondante
+    for (const s of societes) {
+        // Vérifier PK
+        const pkMin = parseInt(s.pk_min);
+        const pkMax = parseInt(s.pk_max);
+        if (pkNum < pkMin || pkNum > pkMax) continue;
+        
+        // Vérifier Axe (si spécifié)
+        if (s.axe && axe && s.axe !== axe) continue;
+        
+        // ✅ Vérifier Date entrée/sortie (si spécifiées)
+        if (s.date_entree || s.date_sortie) {
+            if (!dateAccidentObj) continue; // Pas de date → ignorer
+            
+            const dateEntree = s.date_entree ? new Date(s.date_entree) : new Date('1900-01-01');
+            const dateSortie = s.date_sortie ? new Date(s.date_sortie) : new Date('2100-12-31');
+            
+            if (dateAccidentObj < dateEntree || dateAccidentObj > dateSortie) {
+                continue; // Hors période
+            }
+        }
+        
+        return s.nom;
+    }
+    
     return 'Inconnue';
 }
 
@@ -607,7 +671,9 @@ function enrichirDonnees(donnees) {
         const pk = extrairePK(ligne['PK']);
         nouvelle['_pk_num'] = pk;
         nouvelle['_troncon'] = determinerTroncon(pk);
-        nouvelle['_societe'] = determinerSociete(pk);
+        // ✅ Déterminer la société selon PK, Axe et Date
+        const datePourSociete = ligne['Date prise en charge'] || ligne['Date et heure accident'];
+        nouvelle['_societe'] = determinerSociete(pk, nouvelle['_axe'], datePourSociete);
         
         let axe = 'A3';
         if (pk !== null && !isNaN(pk)) {
@@ -2119,29 +2185,74 @@ const Depanneurs = {
         }
         
         // ---- بناء قائمة الشركات ----
-        const societes = new Set();
-        toutesLesDonnees.forEach(d => {
-            if (d['_societe'] && d['_societe'] !== 'Inconnue') {
-                societes.add(d['_societe']);
+        // ====== ✅ بناء قائمة الشركات (تصفية حسب الفلاتر النشطة) ======
+            
+            // 1. Récupérer les filtres actifs
+            const tronconSelectValues = Array.from(selectTroncon.selectedOptions).map(opt => opt.value);
+            const moisSelectValues = Array.from(selectMois.selectedOptions).map(opt => opt.value);
+            const tronconAllFiltre = tronconSelectValues.includes('all');
+            const moisAllFiltre = moisSelectValues.includes('all');
+            
+            // 2. Filtrer les données selon les filtres actifs
+            const donneesFiltreesPourSocietes = toutesLesDonnees.filter(d => {
+                // Filtre Tronçon
+                if (!tronconAllFiltre && !tronconSelectValues.includes(d['_troncon'])) return false;
+                
+                // Filtre Mois
+                if (!moisAllFiltre && !moisSelectValues.includes(String(d['_mois']))) return false;
+                
+                // Seulement les accidents avec un délai de dépannage
+                if (!d['_delai_depannage'] || d['_delai_depannage'] === '--' || d['_delai_depannage'] === '-') return false;
+                
+                return true;
+            });
+            
+            // 3. Extraire les sociétés uniques de ces données filtrées
+            const societes = new Set();
+            donneesFiltreesPourSocietes.forEach(d => {
+                if (d['_societe'] && d['_societe'] !== 'Inconnue') {
+                    societes.add(d['_societe']);
+                }
+            });
+            
+            // Trier alphabétiquement
+            const societesTriees = Array.from(societes).sort();
+            
+            console.log('📊 Sociétés disponibles (après filtres):', societesTriees);
+            console.log('   - Tronçons sélectionnés:', tronconSelectValues);
+            console.log('   - Mois sélectionnés:', moisSelectValues);
+            console.log('   - Accidents filtrés:', donneesFiltreesPourSocietes.length);
+            
+            // 4. Reconstruire la liste
+            selectSociete.innerHTML = '<option value="all">Toutes les sociétés</option>';
+            societesTriees.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                selectSociete.appendChild(opt);
+            });
+            
+            // 5. Restaurer les sélections précédentes SI elles existent encore
+            Array.from(selectSociete.options).forEach(opt => {
+                if (selectedSociete.includes(opt.value) && opt.value !== 'all') {
+                    opt.selected = true;
+                }
+            });
+            
+            // Si aucune société n'est sélectionnée, sélectionner "all"
+            if (selectSociete.selectedOptions.length === 0) {
+                selectSociete.querySelector('option[value="all"]').selected = true;
             }
-        });
-        
-        selectSociete.innerHTML = '<option value="all">Toutes les sociétés</option>';
-        Object.keys(SOCIETES_DEPANNAGE).filter(s => societes.has(s)).forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s;
-            opt.textContent = s;
-            selectSociete.appendChild(opt);
-        });
-        
-        Array.from(selectSociete.options).forEach(opt => {
-            if (selectedSociete.includes(opt.value)) opt.selected = true;
-        });
-        if (selectSociete.selectedOptions.length === 0) {
-            selectSociete.querySelector('option[value="all"]').selected = true;
-        }
-    },
-    
+            
+            // Si la société précédemment sélectionnée n'existe plus, revenir à "all"
+            if (selectedSociete.length > 0 && !selectedSociete.includes('all')) {
+                const existeEncore = selectedSociete.some(s => societes.has(s));
+                if (!existeEncore) {
+                    console.log('⚠️ La société sélectionnée n\'existe plus dans les données filtrées → retour à "Toutes"');
+                    selectSociete.querySelector('option[value="all"]').selected = true;
+                }
+            }
+        },
     // ====== تطبيق الفلاتر ======
     appliquerFiltres: function() {
         const tronconSelect = document.getElementById('depTronconFilter');
@@ -2301,9 +2412,21 @@ const Depanneurs = {
         }
         
         // الشركات
-        const societesListe = Object.keys(SOCIETES_DEPANNAGE).filter(s => {
-            return Object.values(resultats).some(m => m[s]);
+       // ====== ✅ الشركات (dynamique depuis les données) ======
+        const societesSet = new Set();
+        Object.keys(parMoisSociete).forEach(mois => {
+            Object.keys(parMoisSociete[mois]).forEach(s => {
+                societesSet.add(s);
+            });
         });
+        const societesListe = Array.from(societesSet).sort();
+        
+        console.log('📊 Sociétés affichées dans le tableau:', societesListe);
+        
+        if (societesListe.length === 0) {
+            container.innerHTML = `<div class="status-empty"><h3>📭 Aucune société avec des délais</h3></div>`;
+            return;
+        }
         
         // ✅ تحديد الأعمدة التي ستظهر بناءً على فلتر Type
         const showPL = (typeFilter === 'all' || typeFilter === 'PL');
@@ -3121,13 +3244,14 @@ const Parametres = {
                 { id: 'T4', direction: 'DRRS', axe: 'A3', pk_min: 282000, pk_max: 430000 }
             ],
             societes: [
-                { nom: 'TransAlmahata 1', direction: 'DRRS', axe: 'A3', pk_min: 27000, pk_max: 65000 },
-                { nom: 'TransAlmahata 2', direction: 'DRRS', axe: 'A3', pk_min: 65000, pk_max: 127000 },
-                { nom: 'Ezziraoui', direction: 'DRRS', axe: 'A3', pk_min: 127000, pk_max: 160000 },
-                { nom: 'INT Assistance', direction: 'DRRS', axe: 'A3', pk_min: 160000, pk_max: 249000 },
-                { nom: 'INT Assistance', direction: 'DRRS', axe: 'A301', pk_min: 0, pk_max: 13000 },
-                { nom: 'Routier Multi Service et INT Assistance', direction: 'DRRS', axe: 'A3', pk_min: 249000, pk_max: 310000 },
-                { nom: 'Grand Sud', direction: 'DRRS', axe: 'A3', pk_min: 310000, pk_max: 430000 }
+                { nom: 'TransAlmahata 1', direction: 'DRRS', axe: 'A3', pk_min: 27000, pk_max: 65000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
+                { nom: 'TransAlmahata 2', direction: 'DRRS', axe: 'A3', pk_min: 65000, pk_max: 127000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
+                { nom: 'Ezziraoui', direction: 'DRRS', axe: 'A3', pk_min: 127000, pk_max: 160000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
+                { nom: 'INT Assistance', direction: 'DRRS', axe: 'A3', pk_min: 160000, pk_max: 249000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
+                { nom: 'INT Assistance', direction: 'DRRS', axe: 'A301', pk_min: 0, pk_max: 13000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
+                { nom: 'Routier Multi Service et INT Assistance', direction: 'DRRS', axe: 'A3', pk_min: 249000, pk_max: 310000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
+                { nom: 'Essalam', direction: 'DRRS', axe: 'A3', pk_min: 310000, pk_max: 430000, date_entree: '2024-01-01', date_sortie: '2024-12-31' },
+                { nom: 'Grand Sud', direction: 'DRRS', axe: 'A3', pk_min: 310000, pk_max: 430000, date_entree: '2025-01-01', date_sortie: '2026-12-31' }
             ],
             gendarmerie: [
                 { nom: 'PMA Settat', direction: 'DRRS', axe: 'A3', pk_min: 27000, pk_max: 106000 },
@@ -3265,15 +3389,17 @@ const Parametres = {
         
         tbody.innerHTML = data.map((item, index) => `
             <tr>
-                <td><input type="text" value="${item.nom}" data-index="${index}" data-field="nom" class="editable" style="width:150px;"></td>
+                <td><input type="text" value="${item.nom || ''}" data-index="${index}" data-field="nom" class="editable" style="width:150px;"></td>
                 <td>
                     <select data-index="${index}" data-field="direction" class="editable" style="width:100px;">
                         ${directions.map(d => `<option value="${d}" ${d === item.direction ? 'selected' : ''}>${d}</option>`).join('')}
                     </select>
                 </td>
-                <td><input type="text" value="${item.axe}" data-index="${index}" data-field="axe" class="editable" style="width:70px;"></td>
-                <td><input type="number" value="${item.pk_min}" data-index="${index}" data-field="pk_min" class="editable" style="width:90px;"></td>
-                <td><input type="number" value="${item.pk_max}" data-index="${index}" data-field="pk_max" class="editable" style="width:90px;"></td>
+                <td><input type="text" value="${item.axe || ''}" data-index="${index}" data-field="axe" class="editable" style="width:70px;"></td>
+                <td><input type="number" value="${item.pk_min || 0}" data-index="${index}" data-field="pk_min" class="editable" style="width:90px;"></td>
+                <td><input type="number" value="${item.pk_max || 0}" data-index="${index}" data-field="pk_max" class="editable" style="width:90px;"></td>
+                <td><input type="date" value="${item.date_entree || '2024-01-01'}" data-index="${index}" data-field="date_entree" class="editable" style="width:130px;"></td>
+                <td><input type="date" value="${item.date_sortie || '2026-12-31'}" data-index="${index}" data-field="date_sortie" class="editable" style="width:130px;"></td>
                 <td><button class="btn-delete" onclick="Parametres.supprimerLigne('societes', ${index})">🗑️</button></td>
             </tr>
         `).join('');
@@ -3315,7 +3441,15 @@ const Parametres = {
     ajouterSociete: function() {
         const data = this.chargerDonnees('societes');
         const directions = this.chargerDonnees('directions') || ['DRRS'];
-        data.push({ nom: 'Nouvelle Société', direction: directions[0] || 'DRRS', axe: 'A3', pk_min: 0, pk_max: 0 });
+        data.push({ 
+            nom: 'Nouvelle Société', 
+            direction: directions[0] || 'DRRS', 
+            axe: 'A3', 
+            pk_min: 0, 
+            pk_max: 0,
+            date_entree: '2024-01-01',
+            date_sortie: '2026-12-31'
+        });
         this.sauvegarderDonnees('societes', data);
         this.afficherSocietes();
     },
@@ -3412,13 +3546,15 @@ const Parametres = {
         // Mettre à jour SOCIETES_DEPANNAGE global
         window.SOCIETES_DEPANNAGE = {};
         societes.forEach(s => {
-            const key = s.nom + (s.axe ? '_' + s.axe : '');
+            const key = s.nom + '_' + (s.axe || '') + '_' + (s.date_entree || '');
             window.SOCIETES_DEPANNAGE[key] = {
                 min: parseInt(s.pk_min),
                 max: parseInt(s.pk_max),
                 axe: s.axe,
                 direction: s.direction,
-                nom: s.nom
+                nom: s.nom,
+                date_entree: s.date_entree,
+                date_sortie: s.date_sortie
             };
         });
         
@@ -3675,17 +3811,29 @@ document.addEventListener('DOMContentLoaded', function() {
     // ====== ربط فلاتر Analyse ======
     const analyseTroncon = document.getElementById('analyseTronconFilter');
     const analyseMois = document.getElementById('analyseMoisFilter');
-    if (analyseTroncon) analyseTroncon.addEventListener('change', function() { Analyse.appliquerFiltres(); });
-    if (analyseMois) analyseMois.addEventListener('change', function() { Analyse.appliquerFiltres(); });
-    
+   if (analyseTroncon) analyseTroncon.addEventListener('change', function() { 
+        Analyse.mettreAJourFiltres();
+        Analyse.appliquerFiltres(); 
+    });
+    if (analyseMois) analyseMois.addEventListener('change', function() { 
+        Analyse.mettreAJourFiltres();
+        Analyse.appliquerFiltres(); 
+    });
+
     // ====== ربط فلاتر Intervenants ======
     const intervTroncon = document.getElementById('intervTronconFilter');
     const intervMois = document.getElementById('intervMoisFilter');
     const intervType = document.getElementById('intervTypeFilter');
     const intervPma = document.getElementById('intervPmaFilter');
     
-    if (intervTroncon) intervTroncon.addEventListener('change', function() { Intervenants.appliquerFiltres(); });
-    if (intervMois) intervMois.addEventListener('change', function() { Intervenants.appliquerFiltres(); });
+     if (intervTroncon) intervTroncon.addEventListener('change', function() { 
+        Intervenants.mettreAJourFiltres();
+        Intervenants.appliquerFiltres(); 
+    });
+    if (intervMois) intervMois.addEventListener('change', function() { 
+        Intervenants.mettreAJourFiltres();
+        Intervenants.appliquerFiltres(); 
+    });
     if (intervType) intervType.addEventListener('change', function() { Intervenants.appliquerFiltres(); });
     if (intervPma) intervPma.addEventListener('change', function() { Intervenants.appliquerFiltres(); });
     
@@ -3695,11 +3843,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const depSociete = document.getElementById('depSocieteFilter');
     const depType = document.getElementById('depTypeFilter');
     
-    if (depTroncon) depTroncon.addEventListener('change', function() { Depanneurs.appliquerFiltres(); });
-    if (depMois) depMois.addEventListener('change', function() { Depanneurs.appliquerFiltres(); });
+    if (depTroncon) depTroncon.addEventListener('change', function() { 
+        Depanneurs.mettreAJourFiltres();  // ✅ Mettre à jour les listes
+        Depanneurs.appliquerFiltres(); 
+    });
+    if (depMois) depMois.addEventListener('change', function() { 
+        Depanneurs.mettreAJourFiltres();  // ✅ Mettre à jour les listes
+        Depanneurs.appliquerFiltres(); 
+    });
     if (depSociete) depSociete.addEventListener('change', function() { Depanneurs.appliquerFiltres(); });
     if (depType) depType.addEventListener('change', function() { Depanneurs.appliquerFiltres(); });
-    
+
     // ====== ربط فلاتر Graphiques ======
     const graphTroncon = document.getElementById('graphTronconFilter');
     const graphMois = document.getElementById('graphMoisFilter');
@@ -4079,22 +4233,25 @@ const Rapprochement = {
     
     // ====== METTRE À JOUR LES FILTRES ======
     mettreAJourFiltres: function() {
-        const selectTroncon = document.getElementById('rappTronconFilter');
-        const selectMois = document.getElementById('rappMoisFilter');
-        if (!selectTroncon || !selectMois) return;
+        const selectTroncon = document.getElementById('depTronconFilter');
+        const selectMois = document.getElementById('depMoisFilter');
+        const selectSociete = document.getElementById('depSocieteFilter');
         
-        // Utiliser les données source (ou les données de comparaison si source vide)
-        const donnees = this.donneesSource.length > 0 ? this.donneesSource : this.donneesCompare;
-        if (donnees.length === 0) return;
+        if (!selectTroncon || !selectMois || !selectSociete) return;
         
-        // Tronçons
+        // ---- حفظ التحديدات الحالية ----
+        const selectedTroncon = Array.from(selectTroncon.selectedOptions).map(opt => opt.value);
+        const selectedMois = Array.from(selectMois.selectedOptions).map(opt => opt.value);
+        const selectedSociete = Array.from(selectSociete.selectedOptions).map(opt => opt.value);
+        
+        // ---- بناء قائمة المقاطع (مع T2_2) ----
         const troncons = new Set();
-        donnees.forEach(d => {
+        toutesLesDonnees.forEach(d => {
             if (d['_troncon'] && d['_troncon'] !== 'Inconnu') {
                 troncons.add(d['_troncon']);
             }
         });
-        const valTroncon = selectTroncon.value;
+        
         selectTroncon.innerHTML = '<option value="all">Tous les tronçons</option>';
         ['T1', 'T2', 'T2_2', 'T3', 'T4'].forEach(t => {
             const opt = document.createElement('option');
@@ -4102,27 +4259,84 @@ const Rapprochement = {
             opt.textContent = t + ' (' + getPkRange(t) + ')';
             selectTroncon.appendChild(opt);
         });
-        if (troncons.has(valTroncon)) selectTroncon.value = valTroncon;
-        else selectTroncon.value = 'all';
         
-        // Mois
+        Array.from(selectTroncon.options).forEach(opt => {
+            if (selectedTroncon.includes(opt.value)) opt.selected = true;
+        });
+        if (selectTroncon.selectedOptions.length === 0) {
+            selectTroncon.querySelector('option[value="all"]').selected = true;
+        }
+        
+        // ---- بناء قائمة الأشهر ----
         const moisExistants = new Set();
-        donnees.forEach(d => {
+        toutesLesDonnees.forEach(d => {
             if (d['_mois'] && d['_mois'] >= 1 && d['_mois'] <= 12) {
                 moisExistants.add(d['_mois']);
             }
         });
-        const valMois = selectMois.value;
+        
         selectMois.innerHTML = '<option value="all">Tous les mois</option>';
-        const moisNoms = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        const moisNoms = ['Janvier','Février','Mars','Avril','Mai','Juin',
+                          'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
         Array.from(moisExistants).sort((a,b) => a-b).forEach(m => {
             const opt = document.createElement('option');
             opt.value = m;
             opt.textContent = moisNoms[m - 1];
             selectMois.appendChild(opt);
         });
-        if (moisExistants.has(parseInt(valMois))) selectMois.value = valMois;
-        else selectMois.value = 'all';
+        
+        Array.from(selectMois.options).forEach(opt => {
+            if (selectedMois.includes(opt.value)) opt.selected = true;
+        });
+        if (selectMois.selectedOptions.length === 0) {
+            selectMois.querySelector('option[value="all"]').selected = true;
+        }
+        
+        // ====== ✅ بناء قائمة الشركات (dynamique depuis localStorage) ======
+        const societes = new Set();
+        
+        // ✅ Option 1: Récupérer depuis les données chargées
+        toutesLesDonnees.forEach(d => {
+            if (d['_societe'] && d['_societe'] !== 'Inconnue' && d['_societe'] !== 'Inconnue') {
+                societes.add(d['_societe']);
+            }
+        });
+        
+        // ✅ Option 2: Récupérer depuis localStorage (config_societes)
+        try {
+            const configData = localStorage.getItem('config_societes');
+            if (configData) {
+                const configSocietes = JSON.parse(configData);
+                configSocietes.forEach(s => {
+                    if (s.nom) societes.add(s.nom);
+                });
+            }
+        } catch(e) {}
+        
+        // ✅ Option 3: Récupérer depuis SOCIETES_DEPANNAGE global
+        Object.keys(SOCIETES_DEPANNAGE).forEach(s => {
+            societes.add(s);
+        });
+        
+        // ✅ Trier les sociétés alphabétiquement
+        const societesTriees = Array.from(societes).sort();
+        
+        selectSociete.innerHTML = '<option value="all">Toutes les sociétés</option>';
+        societesTriees.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = s;
+            selectSociete.appendChild(opt);
+        });
+        
+        console.log('📊 Sociétés disponibles:', societesTriees);
+        
+        Array.from(selectSociete.options).forEach(opt => {
+            if (selectedSociete.includes(opt.value)) opt.selected = true;
+        });
+        if (selectSociete.selectedOptions.length === 0) {
+            selectSociete.querySelector('option[value="all"]').selected = true;
+        }
     },
     
     // ====== APPLIQUER LES FILTRES ======
