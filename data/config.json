@@ -2,35 +2,35 @@
     "troncons": [
         {
             "id": "T1",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "27000",
             "pk_max": "106000"
         },
         {
             "id": "T2",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "106001",
             "pk_max": "198000"
         },
         {
             "id": "T2_2",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A301",
             "pk_min": "0",
             "pk_max": "13000"
         },
         {
             "id": "T3",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "198001",
             "pk_max": "282000"
         },
         {
             "id": "T4",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "282001",
             "pk_max": "430000"
@@ -39,7 +39,7 @@
     "societes": [
         {
             "nom": "TransAlmahata 1",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "27000",
             "pk_max": "65000",
@@ -48,7 +48,7 @@
         },
         {
             "nom": "TransAlmahata 2",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "65001",
             "pk_max": "127000",
@@ -57,7 +57,7 @@
         },
         {
             "nom": "Ezziraoui",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "127001",
             "pk_max": "160000",
@@ -66,7 +66,7 @@
         },
         {
             "nom": "INT Assistance",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "160001",
             "pk_max": "249000",
@@ -75,7 +75,7 @@
         },
         {
             "nom": "INT Assistance",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A301",
             "pk_min": "0",
             "pk_max": "13000",
@@ -84,7 +84,7 @@
         },
         {
             "nom": "Routier Multi Service et INT Assistance",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "249001",
             "pk_max": "310000",
@@ -93,7 +93,7 @@
         },
         {
             "nom": "Grand Sud",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "310001",
             "pk_max": "430000",
@@ -102,7 +102,7 @@
         },
         {
             "nom": "Essalam Assistance",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "199001",
             "pk_max": "430000",
@@ -111,7 +111,7 @@
         },
         {
             "nom": "INSAF Secour",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "127001",
             "pk_max": "199000",
@@ -120,7 +120,7 @@
         },
         {
             "nom": "INSAF Secour",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "0",
             "pk_max": "13000",
@@ -131,63 +131,63 @@
     "gendarmerie": [
         {
             "nom": "PMA Settat",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "27000",
             "pk_max": "106000"
         },
         {
             "nom": "PMA Skhour",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "106001",
             "pk_max": "140000"
         },
         {
             "nom": "PMA Bengurir",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "140001",
             "pk_max": "187000"
         },
         {
             "nom": "PMA Palmeraie",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "187001",
             "pk_max": "198000"
         },
         {
             "nom": "PMA Palmeraie",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A301",
             "pk_min": "0",
             "pk_max": "13000"
         },
         {
             "nom": "PMA Targa",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "198001",
             "pk_max": "246500"
         },
         {
             "nom": "PMA Chihcaoua",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "246501",
             "pk_max": "290000"
         },
         {
             "nom": "PMA Imintanout",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "290001",
             "pk_max": "380000"
         },
         {
             "nom": "PMA Amskroud",
-            "direction": "",
+            "direction": "DRRS",
             "axe": "A3",
             "pk_min": "380001",
             "pk_max": "430000"
