@@ -298,20 +298,73 @@ let donneesFiltrees = [];
 
 const TRONCONS = {
     'T1': { min: 27000, max: 106000, label: 'PK 27000 - PK 106000' },
-    'T2': { min: 106000, max: 198000, label: 'PK 106000 - PK 198000' },
+    'T2': { min: 106001, max: 198000, label: 'PK 106000 - PK 198000' },
     'T2_2': { min: 0, max: 13000, label: 'PK 0 - PK 13000' },
-    'T3': { min: 198000, max: 282000, label: 'PK 198000 - PK 282000' },
-    'T4': { min: 282000, max: 430000, label: 'PK 282000 - PK 430000' }
+    'T3': { min: 198001, max: 282000, label: 'PK 198000 - PK 282000' },
+    'T4': { min: 282001, max: 430000, label: 'PK 282000 - PK 430000' }
 };
 
 const SOCIETES_DEPANNAGE = {
     'TransAlmahata 1': { min: 27000, max: 65000 },
-    'TransAlmahata 2': { min: 65000, max: 127000 },
-    'Ezziraoui': { min: 127000, max: 160000 },
-    'INT Assistance': { min: 160000, max: 249000 },
-    'Routier Multi Service et INT Assistance': { min: 249000, max: 310000 },
-    'Grand Sud': { min: 310000, max: 430000 }
+    'TransAlmahata 2': { min: 65001, max: 127000 },
+    'Ezziraoui': { min: 127001, max: 160000 },
+    'INT Assistance': { min: 160001, max: 249000 },
+    'Routier Multi Service et INT Assistance': { min: 249001, max: 310000 },
+    'Grand Sud': { min: 310001, max: 430000 }
 };
+// ============================================================
+// CHARGEMENT AUTOMATIQUE DE LA CONFIGURATION (1 seule fois)
+// ============================================================
+
+const CONFIG_URL = 'https://raw.githubusercontent.com/Nouari-Abdelkabir/Accidentologie/main/data/config.json';
+
+// ✅ Charger la configuration depuis GitHub UNIQUEMENT si localStorage est vide
+async function initialiserConfiguration() {
+    // ✅ Vérifier si localStorage contient déjà une config
+    const aDesDonnees = localStorage.getItem('config_societes') || 
+                        localStorage.getItem('config_troncons') ||
+                        localStorage.getItem('config_gendarmerie');
+    
+    if (aDesDonnees) {
+        console.log('✅ Configuration locale trouvée, aucun chargement nécessaire');
+        return false;
+    }
+    
+    // ❌ Pas de config locale → charger depuis GitHub
+    console.log('📥 Première utilisation → chargement depuis GitHub...');
+    
+    try {
+        const response = await fetch(CONFIG_URL);
+        
+        if (!response.ok) {
+            console.warn('⚠️ config.json non trouvé → utilisation des valeurs par défaut');
+            return false;
+        }
+        
+        const config = await response.json();
+        
+        // Sauvegarder dans localStorage
+        if (config.troncons && config.troncons.length > 0) {
+            localStorage.setItem('config_troncons', JSON.stringify(config.troncons));
+        }
+        if (config.societes && config.societes.length > 0) {
+            localStorage.setItem('config_societes', JSON.stringify(config.societes));
+        }
+        if (config.gendarmerie && config.gendarmerie.length > 0) {
+            localStorage.setItem('config_gendarmerie', JSON.stringify(config.gendarmerie));
+        }
+        if (config.directions && config.directions.length > 0) {
+            localStorage.setItem('config_directions', JSON.stringify(config.directions));
+        }
+        
+        console.log('✅ Configuration initiale chargée depuis GitHub');
+        return true;
+        
+    } catch(e) {
+        console.warn('⚠️ Erreur chargement config:', e);
+        return false;
+    }
+}
 
 function extrairePK(pkStr) {
     if (pkStr === undefined || pkStr === null || pkStr === '') return null;
@@ -3588,10 +3641,14 @@ const Parametres = {
     },
     
     // ====== 14. INITIALISATION ======
-    init: function() {
+    // ====== 14. INITIALISATION ======
+    init: async function() {
         console.log('⚙️ Initialisation des paramètres...');
         
-        // Créer les données par défaut si elles n'existent pas
+        // ✅ Charger depuis GitHub UNIQUEMENT si localStorage est vide
+        await initialiserConfiguration();
+        
+        // Créer les données par défaut si elles n'existent toujours pas
         const types = ['troncons', 'societes', 'gendarmerie', 'directions'];
         types.forEach(type => {
             const key = 'config_' + type;
@@ -3609,6 +3666,8 @@ const Parametres = {
         
         // Mettre à jour les constantes
         this.mettreAJourConstantes();
+        
+        console.log('✅ Paramètres initialisés');
     },
         // ====== ✅ أضف هذه الدالة هنا ======
     gererClicDirection: function(direction) {
