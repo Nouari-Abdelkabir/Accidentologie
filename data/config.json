@@ -1,0 +1,197 @@
+{
+    "troncons": [
+        {
+            "id": "T1",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "27000",
+            "pk_max": "106000"
+        },
+        {
+            "id": "T2",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "106001",
+            "pk_max": "198000"
+        },
+        {
+            "id": "T2_2",
+            "direction": "",
+            "axe": "A301",
+            "pk_min": "0",
+            "pk_max": "13000"
+        },
+        {
+            "id": "T3",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "198001",
+            "pk_max": "282000"
+        },
+        {
+            "id": "T4",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "282001",
+            "pk_max": "430000"
+        }
+    ],
+    "societes": [
+        {
+            "nom": "TransAlmahata 1",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "27000",
+            "pk_max": "65000",
+            "date_entree": "2010-01-01",
+            "date_sortie": "2028-12-31"
+        },
+        {
+            "nom": "TransAlmahata 2",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "65001",
+            "pk_max": "127000",
+            "date_entree": "2010-01-01",
+            "date_sortie": "2028-12-31"
+        },
+        {
+            "nom": "Ezziraoui",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "127001",
+            "pk_max": "160000",
+            "date_entree": "2025-04-01",
+            "date_sortie": "2028-12-31"
+        },
+        {
+            "nom": "INT Assistance",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "160001",
+            "pk_max": "249000",
+            "date_entree": "2025-04-01",
+            "date_sortie": "2028-12-31"
+        },
+        {
+            "nom": "INT Assistance",
+            "direction": "",
+            "axe": "A301",
+            "pk_min": "0",
+            "pk_max": "13000",
+            "date_entree": "2025-04-01",
+            "date_sortie": "2028-12-31"
+        },
+        {
+            "nom": "Routier Multi Service et INT Assistance",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "249001",
+            "pk_max": "310000",
+            "date_entree": "2025-04-01",
+            "date_sortie": "2028-12-31"
+        },
+        {
+            "nom": "Grand Sud",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "310001",
+            "pk_max": "430000",
+            "date_entree": "2025-04-01",
+            "date_sortie": "2028-12-31"
+        },
+        {
+            "nom": "Essalam Assistance",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "199001",
+            "pk_max": "430000",
+            "date_entree": "2010-01-01",
+            "date_sortie": "2025-03-31"
+        },
+        {
+            "nom": "INSAF Secour",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "127001",
+            "pk_max": "199000",
+            "date_entree": "2010-01-01",
+            "date_sortie": "2025-03-31"
+        },
+        {
+            "nom": "INSAF Secour",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "0",
+            "pk_max": "13000",
+            "date_entree": "2010-01-01",
+            "date_sortie": "2025-03-31"
+        }
+    ],
+    "gendarmerie": [
+        {
+            "nom": "PMA Settat",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "27000",
+            "pk_max": "106000"
+        },
+        {
+            "nom": "PMA Skhour",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "106001",
+            "pk_max": "140000"
+        },
+        {
+            "nom": "PMA Bengurir",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "140001",
+            "pk_max": "187000"
+        },
+        {
+            "nom": "PMA Palmeraie",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "187001",
+            "pk_max": "198000"
+        },
+        {
+            "nom": "PMA Palmeraie",
+            "direction": "",
+            "axe": "A301",
+            "pk_min": "0",
+            "pk_max": "13000"
+        },
+        {
+            "nom": "PMA Targa",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "198001",
+            "pk_max": "246500"
+        },
+        {
+            "nom": "PMA Chihcaoua",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "246501",
+            "pk_max": "290000"
+        },
+        {
+            "nom": "PMA Imintanout",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "290001",
+            "pk_max": "380000"
+        },
+        {
+            "nom": "PMA Amskroud",
+            "direction": "",
+            "axe": "A3",
+            "pk_min": "380001",
+            "pk_max": "430000"
+        }
+    ],
+    "directions": []
+}
