@@ -420,55 +420,55 @@ const CONFIG_URL = 'https://raw.githubusercontent.com/Nouari-Abdelkabir/Accident
 // ✅ Charger la configuration depuis GitHub UNIQUEMENT si localStorage est vide
 async function initialiserConfiguration() {
     const DRRS_LIST = ['DRRS', 'DRRN', 'DRRC', 'DRRO', 'DRRE'];
-    
-    // ✅ Vérifier si une config existe déjà
-    const aDesDonnees = DRRS_LIST.some(drr => 
-        localStorage.getItem('config_' + drr + '_societes')
-    );
-    
-    if (aDesDonnees) {
-        console.log('✅ Configuration locale trouvée');
-        return false;
-    }
-    
-    console.log('📥 Première utilisation → chargement depuis GitHub...');
+    const types = ['troncons', 'societes', 'gendarmerie', 'patrouilleurs', 'protectionCivile', 'fourgonMortelle'];
     
     try {
-        const response = await fetch(CONFIG_URL);
-        if (!response.ok) return false;
+        // ✅ ÉTAPE 1 : Vider TOUTES les configs locales AVANT de charger
+        DRRS_LIST.forEach(drr => {
+            types.forEach(type => {
+                localStorage.removeItem('config_' + drr + '_' + type);
+            });
+        });
+        console.log('🗑️ Anciennes configs locales supprimées');
+        
+        // ✅ ÉTAPE 2 : Charger depuis GitHub
+        console.log('📥 Chargement de config.json depuis GitHub...');
+        const response = await fetch(CONFIG_URL + '?t=' + Date.now());
+        
+        if (!response.ok) {
+            console.warn('⚠️ GitHub indisponible (' + response.status + ') → utilisation des données locales');
+            return false;
+        }
         
         const config = await response.json();
         
-        // ✅ Détecter la structure
+        // ✅ ÉTAPE 3 : Vérifier la structure
         const estImbriquee = config.DRRS || config.DRRN || config.DRRC || config.DRRO || config.DRRE;
         
         if (estImbriquee) {
-            // Structure imbriquée (nouvelle)
+            let compteur = 0;
+            
             DRRS_LIST.forEach(drr => {
-                if (config[drr]) {
-                    if (config[drr].troncons) {
-                        localStorage.setItem('config_' + drr + '_troncons', JSON.stringify(config[drr].troncons));
+                if (!config[drr]) return;
+                
+                types.forEach(type => {
+                    if (config[drr][type] !== undefined) {
+                        localStorage.setItem(
+                            'config_' + drr + '_' + type, 
+                            JSON.stringify(config[drr][type])
+                        );
+                        compteur++;
                     }
-                    if (config[drr].societes) {
-                        localStorage.setItem('config_' + drr + '_societes', JSON.stringify(config[drr].societes));
-                    }
-                    if (config[drr].gendarmerie) {
-                        localStorage.setItem('config_' + drr + '_gendarmerie', JSON.stringify(config[drr].gendarmerie));
-                    }
-                    if (config[drr].patrouilleurs) {
-                        localStorage.setItem('config_' + drr + '_patrouilleurs', JSON.stringify(config[drr].patrouilleurs));
-                    }
-                    if (config[drr].protectionCivile) {
-                        localStorage.setItem('config_' + drr + '_protectionCivile', JSON.stringify(config[drr].protectionCivile));
-                    }
-                    if (config[drr].fourgonMortelle) {
-                        localStorage.setItem('config_' + drr + '_fourgonMortelle', JSON.stringify(config[drr].fourgonMortelle));
-                    }
-                }
+                });
             });
+            
+            console.log('✅ Configuration chargée depuis GitHub (' + compteur + ' entrées)');
+            return true;
+            
         } else {
-            // Structure plate (ancienne) → tout assigner à DRRS
+            // Ancienne structure plate → tout mettre dans DRRS
             console.log('📦 Structure plate détectée → assignation à DRRS');
+            
             if (config.troncons) {
                 localStorage.setItem('config_DRRS_troncons', JSON.stringify(config.troncons));
             }
@@ -478,14 +478,24 @@ async function initialiserConfiguration() {
             if (config.gendarmerie) {
                 localStorage.setItem('config_DRRS_gendarmerie', JSON.stringify(config.gendarmerie));
             }
+            if (config.patrouilleurs) {
+                localStorage.setItem('config_DRRS_patrouilleurs', JSON.stringify(config.patrouilleurs));
+            }
+            if (config.protectionCivile) {
+                localStorage.setItem('config_DRRS_protectionCivile', JSON.stringify(config.protectionCivile));
+            }
+            if (config.fourgonMortelle) {
+                localStorage.setItem('config_DRRS_fourgonMortelle', JSON.stringify(config.fourgonMortelle));
+            }
+            
+            return true;
         }
         
-        console.log('✅ Configuration initiale chargée');
-        return true;
     } catch(e) {
-        console.warn('⚠️ Erreur:', e);
+        console.warn('⚠️ Erreur réseau → utilisation des données locales:', e.message);
         return false;
     }
+
 }
 
 function extrairePK(pkStr) {
