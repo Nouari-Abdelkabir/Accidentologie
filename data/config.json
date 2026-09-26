@@ -29,7 +29,176 @@
             { "nom": "PMA Chihcaoua", "axe": "A3", "pk_min": "246501", "pk_max": "290000" },
             { "nom": "PMA Imintanout", "axe": "A3", "pk_min": "290001", "pk_max": "380000" },
             { "nom": "PMA Amskroud", "axe": "A3", "pk_min": "380001", "pk_max": "430000" }
+        ],
+        "patrouilleurs": [
+            {
+                "id": "PAT1",
+                "axe": "A3",
+                "pk_min": "27000",
+                "pk_max": "65000"
+            },
+            {
+                "id": "PAT2",
+                "axe": "A3",
+                "pk_min": "65001",
+                "pk_max": "106000"
+            },
+            {
+                "id": "PAT3",
+                "axe": "A3",
+                "pk_min": "106001",
+                "pk_max": "160000"
+            },
+            {
+                "id": "PAT4",
+                "axe": "A3",
+                "pk_min": "160001",
+                "pk_max": "198000"
+            },
+            {
+                "id": "PAT4",
+                "axe": "A301",
+                "pk_min": "0",
+                "pk_max": "13000"
+            },
+            {
+                "id": "PAT5",
+                "axe": "A3",
+                "pk_min": "198001",
+                "pk_max": "242000"
+            },
+            {
+                "id": "PAT6",
+                "axe": "A3",
+                "pk_min": "242001",
+                "pk_max": "282000"
+            },
+            {
+                "id": "PAT7",
+                "axe": "A3",
+                "pk_min": "282001",
+                "pk_max": "310000"
+            },
+            {
+                "id": "PAT8",
+                "axe": "A3",
+                "pk_min": "310001",
+                "pk_max": "324000"
+            },
+            {
+                "id": "PAT9",
+                "axe": "A3",
+                "pk_min": "324001",
+                "pk_max": "390000"
+            },
+            {
+                "id": "PAT10",
+                "axe": "A3",
+                "pk_min": "390001",
+                "pk_max": "430000"
+            }
+        ],
+        "protectionCivile": [
+            {
+                "id": "PC1",
+                "axe": "A3",
+                "pk_min": "27000",
+                "pk_max": "106000"
+            },
+            {
+                "id": "PC2",
+                "axe": "A3",
+                "pk_min": "106001",
+                "pk_max": "140000"
+            },
+            {
+                "id": "PC3",
+                "axe": "A3",
+                "pk_min": "140001",
+                "pk_max": "187000"
+            },
+            {
+                "id": "PC4",
+                "axe": "A3",
+                "pk_min": "187001",
+                "pk_max": "198000"
+            },
+            {
+                "id": "PC5",
+                "axe": "A3",
+                "pk_min": "198001",
+                "pk_max": "246500"
+            },
+            {
+                "id": "PC6",
+                "axe": "A3",
+                "pk_min": "246501",
+                "pk_max": "290000"
+            },
+            {
+                "id": "PC7",
+                "axe": "A3",
+                "pk_min": "290001",
+                "pk_max": "380000"
+            },
+            {
+                "id": "PC8",
+                "axe": "A3",
+                "pk_min": "380001",
+                "pk_max": "430000"
+            }
+        ],
+        "fourgonMortelle": [
+            {
+                "id": "FM1",
+                "axe": "A3",
+                "pk_min": "27000",
+                "pk_max": "106000"
+            },
+            {
+                "id": "FM2",
+                "axe": "A3",
+                "pk_min": "106001",
+                "pk_max": "140000"
+            },
+            {
+                "id": "FM3",
+                "axe": "A3",
+                "pk_min": "140001",
+                "pk_max": "187000"
+            },
+            {
+                "id": "FM4",
+                "axe": "A3",
+                "pk_min": "187001",
+                "pk_max": "198000"
+            },
+            {
+                "id": "FM5",
+                "axe": "A3",
+                "pk_min": "198001",
+                "pk_max": "246500"
+            },
+            {
+                "id": "FM6",
+                "axe": "A3",
+                "pk_min": "246501",
+                "pk_max": "290000"
+            },
+            {
+                "id": "FM7",
+                "axe": "A3",
+                "pk_min": "290001",
+                "pk_max": "380000"
+            },
+            {
+                "id": "FM8",
+                "axe": "A3",
+                "pk_min": "380001",
+                "pk_max": "430000"
+            }
         ]
+    
     },
     "DRRN": {
         "troncons": [
