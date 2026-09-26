@@ -1,6 +1,8 @@
 // ============================================================
 // 📦 SCRIPT.JS - Version compatible avec index.html actuel
 // ============================================================
+
+
 // ============================================================
 // INDEXEDDB SPÉCIFIQUE POUR ZACC
 // ============================================================
@@ -312,6 +314,103 @@ const SOCIETES_DEPANNAGE = {
     'Routier Multi Service et INT Assistance': { min: 249001, max: 310000 },
     'Grand Sud': { min: 310001, max: 430000 }
 };
+
+// ============================================================
+// 🆕 HELPER : Récupérer les tronçons ACTIFS selon le DRR courant
+// ============================================================
+function getTronconsActifs() {
+    let liste = [];
+    
+    // Priorité 1 : window.TRONCONS
+    if (window.TRONCONS && typeof window.TRONCONS === 'object' && Object.keys(window.TRONCONS).length > 0) {
+        liste = Object.keys(window.TRONCONS);
+        console.log('✅ [getTronconsActifs] Depuis TRONCONS:', liste);
+        return liste;
+    }
+    
+    // ✅ Priorité 2 : fallback sur la config du DRR actif (via localStorage)
+    const drrActif = (typeof Parametres !== 'undefined' && Parametres.directionActive)
+                    || window.directionActiveCourante
+                    || 'DRRS';
+    
+    try {
+        const data = localStorage.getItem('config_' + drrActif + '_troncons');
+        if (data) {
+            const arr = JSON.parse(data);
+            if (Array.isArray(arr) && arr.length > 0) {
+                liste = arr.map(t => t.id).filter(x => x);
+                console.log('✅ [getTronconsActifs] Depuis config_' + drrActif + '_troncons:', liste);
+                return liste;
+            }
+        }
+    } catch(e) {
+        console.warn('⚠️ [getTronconsActifs] Erreur lecture config:', e);
+    }
+    
+    // Priorité 3 : fallback ultime DRRS
+    console.warn('⚠️ [getTronconsActifs] Fallback ultime utilisé');
+    return ['T1', 'T2', 'T2_2', 'T3', 'T4'];
+}
+
+// ============================================================
+// 🆕 Mettre à jour le label de l'année dans le titre Analyse
+// ============================================================
+function mettreAJourAnneeLabel() {
+    const selectAnnee = document.getElementById('chargementAnneeFilter');
+    if (!selectAnnee) return;
+    
+    const val = selectAnnee.value;
+    const texte = (val === 'all') ? '' : '— ' + val;
+    
+    // Page Analyse
+    const labelAnalyse = document.getElementById('analyseAnneeLabel');
+    if (labelAnalyse) labelAnalyse.textContent = texte;
+    
+    // Page Intervenants
+    const labelInterv = document.getElementById('intervenantsAnneeLabel');
+    if (labelInterv) labelInterv.textContent = texte;
+    
+    // Page Dépanneurs
+    const labelDep = document.getElementById('depanneursAnneeLabel');
+    if (labelDep) labelDep.textContent = texte;
+    
+    // Page Graphiques (Tableau de Bord)
+    const labelGraph = document.getElementById('graphiquesAnneeLabel');
+    if (labelGraph) labelGraph.textContent = texte;
+
+    // Page Rapprochement
+    const labelRapp = document.getElementById('rapprochementAnneeLabel');
+    if (labelRapp) {
+        const selRapp = document.getElementById('rappAnneeFilter');
+        const valRapp = selRapp ? selRapp.value : val;
+        labelRapp.textContent = (valRapp === 'all' || !valRapp) ? '' : '— ' + valRapp;
+    }
+}
+
+// ============================================================
+// 🆕 HELPER : Récupérer le label PK d'un tronçon (dynamique)
+// ============================================================
+function getPkRangeDynamique(troncon) {
+    if (window.TRONCONS && window.TRONCONS[troncon]) {
+        const t = window.TRONCONS[troncon];
+        return formatPKLabel(t.min) + ' - ' + formatPKLabel(t.max);
+    }
+    // Fallback : ancien comportement
+    const ranges = {
+        'T1': '27 000 - 106 000',
+        'T2': '106 000 - 198 000',
+        'T2_2': '0 - 13 000',
+        'T3': '198 000 - 282 000',
+        'T4': '282 000 - 430 000'
+    };
+    return ranges[troncon] || 'Inconnu';
+}
+
+function formatPKLabel(n) {
+    const num = parseInt(n);
+    if (isNaN(num)) return String(n);
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
 // ============================================================
 // CHARGEMENT AUTOMATIQUE DE LA CONFIGURATION (1 seule fois)
 // ============================================================
@@ -320,48 +419,71 @@ const CONFIG_URL = 'https://raw.githubusercontent.com/Nouari-Abdelkabir/Accident
 
 // ✅ Charger la configuration depuis GitHub UNIQUEMENT si localStorage est vide
 async function initialiserConfiguration() {
-    // ✅ Vérifier si localStorage contient déjà une config
-    const aDesDonnees = localStorage.getItem('config_societes') || 
-                        localStorage.getItem('config_troncons') ||
-                        localStorage.getItem('config_gendarmerie');
+    const DRRS_LIST = ['DRRS', 'DRRN', 'DRRC', 'DRRO', 'DRRE'];
+    
+    // ✅ Vérifier si une config existe déjà
+    const aDesDonnees = DRRS_LIST.some(drr => 
+        localStorage.getItem('config_' + drr + '_societes')
+    );
     
     if (aDesDonnees) {
-        console.log('✅ Configuration locale trouvée, aucun chargement nécessaire');
+        console.log('✅ Configuration locale trouvée');
         return false;
     }
     
-    // ❌ Pas de config locale → charger depuis GitHub
     console.log('📥 Première utilisation → chargement depuis GitHub...');
     
     try {
         const response = await fetch(CONFIG_URL);
-        
-        if (!response.ok) {
-            console.warn('⚠️ config.json non trouvé → utilisation des valeurs par défaut');
-            return false;
-        }
+        if (!response.ok) return false;
         
         const config = await response.json();
         
-        // Sauvegarder dans localStorage
-        if (config.troncons && config.troncons.length > 0) {
-            localStorage.setItem('config_troncons', JSON.stringify(config.troncons));
-        }
-        if (config.societes && config.societes.length > 0) {
-            localStorage.setItem('config_societes', JSON.stringify(config.societes));
-        }
-        if (config.gendarmerie && config.gendarmerie.length > 0) {
-            localStorage.setItem('config_gendarmerie', JSON.stringify(config.gendarmerie));
-        }
-        if (config.directions && config.directions.length > 0) {
-            localStorage.setItem('config_directions', JSON.stringify(config.directions));
+        // ✅ Détecter la structure
+        const estImbriquee = config.DRRS || config.DRRN || config.DRRC || config.DRRO || config.DRRE;
+        
+        if (estImbriquee) {
+            // Structure imbriquée (nouvelle)
+            DRRS_LIST.forEach(drr => {
+                if (config[drr]) {
+                    if (config[drr].troncons) {
+                        localStorage.setItem('config_' + drr + '_troncons', JSON.stringify(config[drr].troncons));
+                    }
+                    if (config[drr].societes) {
+                        localStorage.setItem('config_' + drr + '_societes', JSON.stringify(config[drr].societes));
+                    }
+                    if (config[drr].gendarmerie) {
+                        localStorage.setItem('config_' + drr + '_gendarmerie', JSON.stringify(config[drr].gendarmerie));
+                    }
+                    if (config[drr].patrouilleurs) {
+                        localStorage.setItem('config_' + drr + '_patrouilleurs', JSON.stringify(config[drr].patrouilleurs));
+                    }
+                    if (config[drr].protectionCivile) {
+                        localStorage.setItem('config_' + drr + '_protectionCivile', JSON.stringify(config[drr].protectionCivile));
+                    }
+                    if (config[drr].fourgonMortelle) {
+                        localStorage.setItem('config_' + drr + '_fourgonMortelle', JSON.stringify(config[drr].fourgonMortelle));
+                    }
+                }
+            });
+        } else {
+            // Structure plate (ancienne) → tout assigner à DRRS
+            console.log('📦 Structure plate détectée → assignation à DRRS');
+            if (config.troncons) {
+                localStorage.setItem('config_DRRS_troncons', JSON.stringify(config.troncons));
+            }
+            if (config.societes) {
+                localStorage.setItem('config_DRRS_societes', JSON.stringify(config.societes));
+            }
+            if (config.gendarmerie) {
+                localStorage.setItem('config_DRRS_gendarmerie', JSON.stringify(config.gendarmerie));
+            }
         }
         
-        console.log('✅ Configuration initiale chargée depuis GitHub');
+        console.log('✅ Configuration initiale chargée');
         return true;
-        
     } catch(e) {
-        console.warn('⚠️ Erreur chargement config:', e);
+        console.warn('⚠️ Erreur:', e);
         return false;
     }
 }
@@ -383,6 +505,20 @@ function extrairePK(pkStr) {
 function determinerTroncon(pk) {
     if (pk === null || pk === undefined || isNaN(pk)) return 'Inconnu';
     const pkNum = Number(pk);
+    
+    // ✅ Utiliser window.TRONCONS (mis à jour dynamiquement selon le DRR actif)
+    const troncons = window.TRONCONS;
+    
+    if (troncons && Object.keys(troncons).length > 0) {
+        for (const [id, t] of Object.entries(troncons)) {
+            const min = parseInt(t.min);
+            const max = parseInt(t.max);
+            if (pkNum >= min && pkNum <= max) return id;
+        }
+        return 'Inconnu';
+    }
+    
+    // ⚠️ Fallback (valeurs par défaut)
     if (pkNum >= 0 && pkNum <= 13000) return 'T2_2';
     if (pkNum >= 27000 && pkNum <= 106000) return 'T1';
     if (pkNum >= 106000 && pkNum <= 198000) return 'T2';
@@ -392,14 +528,7 @@ function determinerTroncon(pk) {
 }
 
 function getPkRange(troncon) {
-    const ranges = {
-        'T1': '27 000 - 106 000',
-        'T2': '106 000 - 198 000',
-        'T2_2': '0 - 13 000',
-        'T3': '198 000 - 282 000',
-        'T4': '282 000 - 430 000'
-    };
-    return ranges[troncon] || 'Inconnu';
+    return getPkRangeDynamique(troncon);
 }
 
 function determinerSociete(pk, axe, dateAccident) {
@@ -407,10 +536,15 @@ function determinerSociete(pk, axe, dateAccident) {
     
     const pkNum = Number(pk);
     
-    // ✅ Récupérer les sociétés depuis localStorage (avec dates)
+    // ✅ Récupérer le DRR actif
+    const drrActif = (typeof Parametres !== 'undefined' && Parametres.directionActive) 
+                    || window.directionActiveCourante 
+                    || 'DRRS';
+    
+    // ✅ Lire depuis localStorage avec la clé du DRR actif
     let societes = [];
     try {
-        const data = localStorage.getItem('config_societes');
+        const data = localStorage.getItem('config_' + drrActif + '_societes');
         if (data) {
             societes = JSON.parse(data);
         }
@@ -428,10 +562,8 @@ function determinerSociete(pk, axe, dateAccident) {
     let dateAccidentObj = null;
     if (dateAccident) {
         if (typeof dateAccident === 'number') {
-            // Excel serial number
             dateAccidentObj = new Date((dateAccident - 25569) * 86400 * 1000);
         } else if (typeof dateAccident === 'string') {
-            // Format "DD/MM/YYYY" ou "DD-MM-YYYY"
             let match = dateAccident.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
             if (match) {
                 dateAccidentObj = new Date(
@@ -449,23 +581,20 @@ function determinerSociete(pk, axe, dateAccident) {
     
     // ✅ Chercher la société correspondante
     for (const s of societes) {
-        // Vérifier PK
         const pkMin = parseInt(s.pk_min);
         const pkMax = parseInt(s.pk_max);
         if (pkNum < pkMin || pkNum > pkMax) continue;
         
-        // Vérifier Axe (si spécifié)
         if (s.axe && axe && s.axe !== axe) continue;
         
-        // ✅ Vérifier Date entrée/sortie (si spécifiées)
         if (s.date_entree || s.date_sortie) {
-            if (!dateAccidentObj) continue; // Pas de date → ignorer
+            if (!dateAccidentObj) continue;
             
             const dateEntree = s.date_entree ? new Date(s.date_entree) : new Date('1900-01-01');
             const dateSortie = s.date_sortie ? new Date(s.date_sortie) : new Date('2100-12-31');
             
             if (dateAccidentObj < dateEntree || dateAccidentObj > dateSortie) {
-                continue; // Hors période
+                continue;
             }
         }
         
@@ -724,16 +853,35 @@ function enrichirDonnees(donnees) {
         const pk = extrairePK(ligne['PK']);
         nouvelle['_pk_num'] = pk;
         nouvelle['_troncon'] = determinerTroncon(pk);
-        // ✅ Déterminer la société selon PK, Axe et Date
-        const datePourSociete = ligne['Date prise en charge'] || ligne['Date et heure accident'];
-        nouvelle['_societe'] = determinerSociete(pk, nouvelle['_axe'], datePourSociete);
         
+        // ✅ Calculer l'axe AVANT d'appeler determinerSociete
         let axe = 'A3';
         if (pk !== null && !isNaN(pk)) {
-            if (pk >= 0 && pk <= 13000) axe = 'A301';
-            else if (pk >= 27000 && pk <= 430000) axe = 'A3';
+            // Détecter l'axe via les tronçons configurés (dynamique)
+            let axeTrouve = null;
+            if (window.TRONCONS) {
+                for (const [tId, info] of Object.entries(window.TRONCONS)) {
+                    if (pk >= parseInt(info.min) && pk <= parseInt(info.max)) {
+                        axeTrouve = info.axe;
+                        break;
+                    }
+                }
+            }
+            if (axeTrouve) {
+                axe = axeTrouve;
+            } else {
+                // Fallback (ancien comportement)
+                if (pk >= 0 && pk <= 13000) axe = 'A301';
+                else if (pk >= 27000 && pk <= 430000) axe = 'A3';
+            }
         }
         nouvelle['_axe'] = axe;
+        
+        // ✅ Maintenant determinerSociete reçoit l'axe CORRECT
+        const datePourSociete = ligne['Date prise en charge'] || ligne['Date et heure accident'];
+        nouvelle['_societe'] = determinerSociete(pk, axe, datePourSociete);
+
+      
         
         // حساب المصابين
         const tuesUsager = parseInt(ligne['Nbr Tués Usagers'] || 0);
@@ -826,6 +974,7 @@ function enrichirDonnees(donnees) {
         // ====== نهاية الإضافة ======
         
         // فروقات التوقيت
+      // فروقات التوقيت
         const dateHeureAccidentComplet = ligne['Date et heure accident'];
         if (dateHeureAccidentComplet) {
             const dateHeurePatrouilleur = ligne["Arrivée de l'agent de l'assistance"];
@@ -843,6 +992,11 @@ function enrichirDonnees(donnees) {
             const dateHeureDepannage = ligne['Arrivée Dépannage'];
             if (dateHeureDepannage && dateHeureDepannage !== '--' && dateHeureDepannage !== '-') {
                 nouvelle['_delai_depannage'] = calculerDifferenceTemps(dateHeureAccidentComplet, dateHeureDepannage);
+            }
+            // 🆕 FOURGON MORTELLE
+            const dateHeureFourgon = ligne['Arrivée Fourgon Mortuaire'];
+            if (dateHeureFourgon && dateHeureFourgon !== '--' && dateHeureFourgon !== '-') {
+                nouvelle['_delai_fourgon'] = calculerDifferenceTemps(dateHeureAccidentComplet, dateHeureFourgon);
             }
         }
         
@@ -1127,45 +1281,52 @@ const Analyse = {
     
     // تهيئة القسم
     init: function() {
+        mettreAJourAnneeLabel();
+        
+        // ✅ Vérification : si window.TRONCONS est vide, restaurer depuis Parametres
+        if ((!window.TRONCONS || Object.keys(window.TRONCONS).length === 0) 
+            && typeof Parametres !== 'undefined' && Parametres.mettreAJourConstantes) {
+            console.log('🔄 [Analyse.init] Restauration de window.TRONCONS...');
+            Parametres.mettreAJourConstantes();
+        }
+        
         this.mettreAJourFiltres();
         this.appliquerFiltres();
     },
     
     // ====== تحديث قوائم الفلاتر ======
-    mettreAJourFiltres: function() {
+     mettreAJourFiltres: function() {
+        // ✅ Mettre à jour le label de l'année
+        mettreAJourAnneeLabel();
+        
+        // ✅ CORRECTION : utiliser les BONS IDs (analyse*, pas graph*)
         const selectTroncon = document.getElementById('analyseTronconFilter');
         const selectMois = document.getElementById('analyseMoisFilter');
+        
         if (!selectTroncon || !selectMois) return;
         
-        // حفظ التحديدات الحالية
+        // Sauvegarder les sélections actuelles
         const selectedTroncon = Array.from(selectTroncon.selectedOptions).map(opt => opt.value);
         const selectedMois = Array.from(selectMois.selectedOptions).map(opt => opt.value);
         
-        // ---- بناء قائمة المقاطع ----
-        const troncons = new Set();
-        toutesLesDonnees.forEach(d => {
-            if (d['_troncon'] && d['_troncon'] !== 'Inconnu') {
-                troncons.add(d['_troncon']);
-            }
-        });
-        
+        // ---- Tronçons dynamiques ----
         selectTroncon.innerHTML = '<option value="all">Tous les tronçons</option>';
-        ['T1', 'T2', 'T2_2', 'T3', 'T4'].forEach(t => {
+        getTronconsActifs().forEach(t => {
             const opt = document.createElement('option');
             opt.value = t;
-            opt.textContent = t + ' (' + getPkRange(t) + ')';
+            opt.textContent = t + ' (' + getPkRangeDynamique(t) + ')';
             selectTroncon.appendChild(opt);
         });
         
-        // استعادة التحديدات
+        // Restaurer les sélections
         Array.from(selectTroncon.options).forEach(opt => {
             if (selectedTroncon.includes(opt.value)) opt.selected = true;
         });
         if (selectTroncon.selectedOptions.length === 0) {
             selectTroncon.querySelector('option[value="all"]').selected = true;
         }
-
-        // ---- بناء قائمة الأشهر ----
+        
+        // ---- Mois ----
         const moisExistants = new Set();
         toutesLesDonnees.forEach(d => {
             if (d['_mois'] && d['_mois'] >= 1 && d['_mois'] <= 12) {
@@ -1183,7 +1344,6 @@ const Analyse = {
             selectMois.appendChild(opt);
         });
         
-        // استعادة التحديدات
         Array.from(selectMois.options).forEach(opt => {
             if (selectedMois.includes(opt.value)) opt.selected = true;
         });
@@ -1275,7 +1435,7 @@ const Analyse = {
         const tronconFiltre = tronconSelect ? tronconSelect.value : 'all';
         const moisFiltre = moisSelect ? moisSelect.value : 'all';
         
-        const tousLesTroncons = ['T1', 'T2', 'T2_2', 'T3', 'T4'];
+        const tousLesTroncons = getTronconsActifs();  
         const resultats = {};
         tousLesTroncons.forEach(t => {
             resultats[t] = { corporelle: 0, materielle: 0, mortelle: 0, total: 0, tues: 0, bg: 0, bl: 0 };
@@ -1329,11 +1489,12 @@ const Analyse = {
     },
     
     calculerResultats: function(donnees) {
-        const tousLesTroncons = ['T1', 'T2', 'T2_2', 'T3', 'T4'];
+        const tousLesTroncons = getTronconsActifs();
         const resultats = {};
         tousLesTroncons.forEach(t => {
             resultats[t] = { corporelle: 0, materielle: 0, mortelle: 0, total: 0, tues: 0, bg: 0, bl: 0 };
         });
+        
         donnees.forEach(d => {
             const t = d['_troncon'];
             if (t && t in resultats) {
@@ -1343,10 +1504,11 @@ const Analyse = {
                 else if (gravite === 'Matérielle') resultats[t].materielle++;
                 else if (gravite === 'Mortelle') resultats[t].mortelle++;
                 resultats[t].tues += parseInt(d['_total_tues'] || 0);
-                resultats[t].bg += parseInt(d['_total_bg'] || 0);
-                resultats[t].bl += parseInt(d['_total_bl'] || 0);
+                resultats[t].bg   += parseInt(d['_total_bg']   || 0);
+                resultats[t].bl   += parseInt(d['_total_bl']   || 0);
             }
         });
+        
         return resultats;
     },
     
@@ -1354,11 +1516,11 @@ const Analyse = {
         const canvas = document.getElementById('chartAnalyseGravite');
         if (!canvas) return;
         if (this.chartGravite) { this.chartGravite.destroy(); this.chartGravite = null; }
-        const data = [
-            resultats.T1.corporelle + resultats.T2.corporelle + resultats.T2_2.corporelle + resultats.T3.corporelle + resultats.T4.corporelle,
-            resultats.T1.materielle + resultats.T2.materielle + resultats.T2_2.materielle + resultats.T3.materielle + resultats.T4.materielle,
-            resultats.T1.mortelle + resultats.T2.mortelle + resultats.T2_2.mortelle + resultats.T3.mortelle + resultats.T4.mortelle
-        ];
+        
+        const troncons = getTronconsActifs();
+        const sum = (key) => troncons.reduce((acc, t) => acc + ((resultats[t] && resultats[t][key]) || 0), 0);
+        const data = [sum('corporelle'), sum('materielle'), sum('mortelle')];
+        
         if (data.every(d => d === 0)) return;
         this.chartGravite = new Chart(canvas, {
             type: 'doughnut',
@@ -1370,15 +1532,15 @@ const Analyse = {
         });
     },
     
-    dessinerVictimes: function(resultats) {
+   dessinerVictimes: function(resultats) {
         const canvas = document.getElementById('chartAnalyseVictimes');
         if (!canvas) return;
         if (this.chartVictimes) { this.chartVictimes.destroy(); this.chartVictimes = null; }
-        const data = [
-            resultats.T1.tues + resultats.T2.tues + resultats.T2_2.tues + resultats.T3.tues + resultats.T4.tues,
-            resultats.T1.bg + resultats.T2.bg + resultats.T2_2.bg + resultats.T3.bg + resultats.T4.bg,
-            resultats.T1.bl + resultats.T2.bl + resultats.T2_2.bl + resultats.T3.bl + resultats.T4.bl
-        ];
+        
+        const troncons = getTronconsActifs();
+        const sum = (key) => troncons.reduce((acc, t) => acc + ((resultats[t] && resultats[t][key]) || 0), 0);
+        const data = [sum('tues'), sum('bg'), sum('bl')];
+        
         if (data.every(d => d === 0)) return;
         this.chartVictimes = new Chart(canvas, {
             type: 'doughnut',
@@ -1394,11 +1556,14 @@ const Analyse = {
         const canvas = document.getElementById('chartAnalyseTroncons');
         if (!canvas) return;
         if (this.chartTroncons) { this.chartTroncons.destroy(); this.chartTroncons = null; }
-        const labels = ['T1', 'T2', 'T2_2', 'T3', 'T4'];
-        const dataCorp = labels.map(t => resultats[t].corporelle);
-        const dataMat = labels.map(t => resultats[t].materielle);
-        const dataMort = labels.map(t => resultats[t].mortelle);
+        
+        const labels = getTronconsActifs();
+        const dataCorp = labels.map(t => (resultats[t] && resultats[t].corporelle) || 0);
+        const dataMat  = labels.map(t => (resultats[t] && resultats[t].materielle) || 0);
+        const dataMort = labels.map(t => (resultats[t] && resultats[t].mortelle) || 0);
+        
         if (dataCorp.every(d => d === 0) && dataMat.every(d => d === 0) && dataMort.every(d => d === 0)) return;
+        
         this.chartTroncons = new Chart(canvas, {
             type: 'bar',
             data: {
@@ -1418,99 +1583,189 @@ const Analyse = {
     },
     
     dessinerPK: function(donnees) {
-        console.log('📈 ===== رسم PK (4 أشرطة) =====');
-        const containers = {
-            croissant: document.getElementById('pkPointsCroissant'),
-            decroissant: document.getElementById('pkPointsDecroissant'),
-            a301_1: document.getElementById('pkPointsA301_1'),
-            a301_2: document.getElementById('pkPointsA301_2')
-        };
-        if (!containers.croissant || !containers.decroissant || !containers.a301_1 || !containers.a301_2) {
-            console.warn('⚠️ حاويات PK غير موجودة');
+        console.log('📈 ===== Dessin PK dynamique =====');
+        const container = document.getElementById('pkChartContainer');
+        if (!container) {
+            console.warn('⚠️ #pkChartContainer introuvable');
             return;
         }
+        
         if (!donnees || donnees.length === 0) {
-            Object.values(containers).forEach(c => {
-                c.innerHTML = '<div style="text-align:center;color:#999;padding:10px;">📭 لا توجد بيانات</div>';
-            });
+            container.innerHTML = '<div style="text-align:center;color:#999;padding:40px;">📭 Aucune donnée</div>';
             return;
         }
         
         const showTues = document.getElementById('filterTues')?.checked ?? true;
-        const showBG = document.getElementById('filterBG')?.checked ?? true;
-        const showBL = document.getElementById('filterBL')?.checked ?? true;
+        const showBG   = document.getElementById('filterBG')?.checked   ?? true;
+        const showBL   = document.getElementById('filterBL')?.checked   ?? true;
         
+        // ===== 1. Grouper les tronçons par axe =====
+        const troncons = getTronconsActifs();
+        const parAxe = {};
+        troncons.forEach(tId => {
+            const info = window.TRONCONS && window.TRONCONS[tId];
+            if (!info) return;
+            const axe = info.axe || 'A3';
+            const pkMin = parseInt(info.min);
+            const pkMax = parseInt(info.max);
+            if (isNaN(pkMin) || isNaN(pkMax)) return;
+            
+            if (!parAxe[axe]) parAxe[axe] = { troncons: [], min: Infinity, max: -Infinity };
+            parAxe[axe].troncons.push({ id: tId, min: pkMin, max: pkMax });
+            if (pkMin < parAxe[axe].min) parAxe[axe].min = pkMin;
+            if (pkMax > parAxe[axe].max) parAxe[axe].max = pkMax;
+        });
+        
+        // Trier les tronçons par pk_min
+        Object.values(parAxe).forEach(a => a.troncons.sort((x, y) => x.min - y.min));
+        
+        // ===== 2. Générer le HTML dynamiquement =====
+        let html = '';
+        let top = 10;
+        const axesList = Object.keys(parAxe);
+        
+        axesList.forEach((axeName, axeIdx) => {
+            const axeData = parAxe[axeName];
+            const range = (axeData.max - axeData.min) || 1;
+            
+            // Titre de l'axe
+            html += `<div style="position:absolute; top:${top}px; left:40px; font-size:12px; color:#1a3a5c; font-weight:bold; background:#e8f0f8; padding:2px 8px; border-radius:6px; z-index:6;">🛣️ ${axeName}</div>`;
+            top += 22;
+            
+            // ===== Labels PK au-dessus des barres (début, frontières, fin) =====
+                   // ===== Labels PK au-dessus des barres (début, frontières, fin) =====
+            html += `<div style="position:absolute; top:${top}px; left:40px; right:40px; height:16px; font-size:10px; color:#0861df; font-weight:600;">`;
+            
+            // Début du premier tronçon
+            html += `<span style="position:absolute; left:0%; transform:translateX(-50%); white-space:nowrap; color:#2d7db8; font-weight:700;">PK ${formatPKLabel(axeData.min)}</span>`;
+            
+            // Frontières intermédiaires (fin de chaque tronçon sauf le dernier)
+            for (let i = 0; i < axeData.troncons.length - 1; i++) {
+                const boundary = axeData.troncons[i].max;
+                const posPct = ((boundary - axeData.min) / range) * 100;
+                html += `<span style="position:absolute; left:${posPct}%; transform:translateX(-50%); white-space:nowrap; color:#e67e22; font-weight:700;">PK ${formatPKLabel(boundary)}</span>`;
+            }
+            
+            // Fin du dernier tronçon
+            html += `<span style="position:absolute; left:100%; transform:translateX(-50%); white-space:nowrap; color:#2d7db8; font-weight:700;">PK ${formatPKLabel(axeData.max)}</span>`;
+            
+            html += `</div>`;
+            top += 20;
+            
+            // ===== Barre Croissant =====
+            html += `<div style="position:absolute; top:${top}px; left:40px; right:40px; height:55px; background:rgba(208,216,224,0.6); border-radius:6px; border:1px solid rgba(176,184,192,0.6); overflow:hidden;">`;
+            // Ligne médiane discontinue (joli effet route)
+            html += `<div style="position:absolute; top:50%; left:0; right:0; height:2px; margin-top:-1px; background-image:linear-gradient(to right, #fff 50%, transparent 50%); background-size:20px 2px; background-repeat:repeat-x;"></div>`;
+            // Lignes verticales aux frontières des tronçons
+            for (let i = 0; i < axeData.troncons.length - 1; i++) {
+                const boundary = axeData.troncons[i].max;
+                const posPct = ((boundary - axeData.min) / range) * 100;
+                html += `<div style="position:absolute; left:${posPct}%; top:0; bottom:0; width:1px; background:rgba(45,125,184,0.35);"></div>`;
+            }
+            html += `</div>`;
+            html += `<div style="position:absolute; top:${top - 13}px; left:40px; font-size:10px; color:#2d7db8; font-weight:bold; z-index:6;">⬆️ ${axeName} Croissant</div>`;
+            html += `<div id="pkPoints-${axeIdx}-croissant" style="position:absolute; top:${top}px; left:40px; right:40px; height:75px; z-index:5;"></div>`;
+            top += 78;
+            
+            // ===== Barre Décroissant =====
+            html += `<div style="position:absolute; top:${top}px; left:40px; right:40px; height:55px; background:rgba(208,216,224,0.6); border-radius:6px; border:1px solid rgba(176,184,192,0.6); overflow:hidden;">`;
+            html += `<div style="position:absolute; top:50%; left:0; right:0; height:2px; margin-top:-1px; background-image:linear-gradient(to right, #fff 50%, transparent 50%); background-size:20px 2px; background-repeat:repeat-x;"></div>`;
+            for (let i = 0; i < axeData.troncons.length - 1; i++) {
+                const boundary = axeData.troncons[i].max;
+                const posPct = ((boundary - axeData.min) / range) * 100;
+                html += `<div style="position:absolute; left:${posPct}%; top:0; bottom:0; width:1px; background:rgba(45,125,184,0.35);"></div>`;
+            }
+            html += `</div>`;
+            html += `<div style="position:absolute; top:${top - 13}px; left:40px; font-size:10px; color:#2d7db8; font-weight:bold; z-index:6;">⬇️ ${axeName} décroissant</div>`;
+            html += `<div id="pkPoints-${axeIdx}-decroissant" style="position:absolute; top:${top}px; left:40px; right:40px; height:75px; z-index:5;"></div>`;
+            top += 85;
+        });
+        
+        // Légende
+        html += `<div style="position:absolute; bottom:4px; right:15px; display:flex; gap:10px; font-size:10px; color:#4a5a6a; background:rgba(255,255,255,0.9); padding:2px 8px; border-radius:6px; border:1px solid #e8ecf2;">
+            <span>🔴 Tués</span><span>🟠 BG</span><span>🟢 BL</span>
+        </div>`;
+        
+        // Tooltip
+        html += `<div id="pkTooltip" style="display:none; position:absolute; background:white; padding:10px 14px; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.15); border:1px solid #d0d8e0; font-size:13px; z-index:100; min-width:180px; pointer-events:none;">
+            <div id="pkTooltipContent"></div>
+        </div>`;
+        
+        container.innerHTML = html;
+        container.style.height = (top + 40) + 'px';
+        
+        // ===== 3. Placer les points =====
         const dataSource = donneesFiltrees.length > 0 ? donneesFiltrees : toutesLesDonnees;
+        let grandTotalCroissant = 0;
+        let grandTotalDecroissant = 0;
         
-        // ====== تصفية A3 Croissant ======
-        const donneesA3Croissant = dataSource.filter(d => {
-            const pk = parseInt(d['_pk_num'] || 0);
-            const sens = d['Sens'] || '';
-            return pk >= 27000 && pk <= 430000 && sens === 'PK croissant';
+        axesList.forEach((axeName, axeIdx) => {
+            const axeData = parAxe[axeName];
+            
+            const donneesAxe = dataSource.filter(d => {
+                const pk = parseInt(d['_pk_num'] || 0);
+                return pk >= axeData.min && pk <= axeData.max;
+            });
+            
+            const donneesCroissant = donneesAxe.filter(d => {
+                const sens = String(d['Sens'] || '').trim().toLowerCase();
+                return sens.includes('croissant') && !sens.includes('décroissant') && !sens.includes('decroissant');
+            });
+            
+            const donneesDecroissant = donneesAxe.filter(d => {
+                const sens = String(d['Sens'] || '').trim().toLowerCase();
+                return sens.includes('décroissant') || sens.includes('decroissant');
+            });
+            
+            grandTotalCroissant += donneesCroissant.length;
+            grandTotalDecroissant += donneesDecroissant.length;
+            
+            this.genererPointsPK(
+                document.getElementById(`pkPoints-${axeIdx}-croissant`),
+                donneesCroissant, showTues, showBG, showBL,
+                axeData.min, axeData.max
+            );
+            
+            this.genererPointsPK(
+                document.getElementById(`pkPoints-${axeIdx}-decroissant`),
+                donneesDecroissant, showTues, showBG, showBL,
+                axeData.min, axeData.max
+            );
         });
         
-        // ====== تصفية A3 decroissant ======
-        const donneesA3Decroissant = dataSource.filter(d => {
-            const pk = parseInt(d['_pk_num'] || 0);
-            const sens = d['Sens'] || '';
-            return pk >= 27000 && pk <= 430000 && sens === 'PK décroissant';
-        });
+        // ===== 4. Mettre à jour les stats =====
+        const elC = document.getElementById('totalCroissant');
+        const elD = document.getElementById('totalDecroissant');
+        if (elC) elC.textContent = grandTotalCroissant;
+        if (elD) elD.textContent = grandTotalDecroissant;
         
-        // ====== تصفية A301 Croissant ======
-        const donneesA301Croissant = dataSource.filter(d => {
-            const pk = parseInt(d['_pk_num'] || 0);
-            const sens = d['Sens'] || '';
-            return pk >= 0 && pk <= 13000 && sens === 'PK croissant';
-        });
-        
-        // ====== تصفية A301 decroissant ======
-        const donneesA301Decroissant = dataSource.filter(d => {
-            const pk = parseInt(d['_pk_num'] || 0);
-            const sens = d['Sens'] || '';
-            return pk >= 0 && pk <= 13000 && sens === 'PK décroissant';
-        });
-        
-        console.log('📊 A3 Croissant:', donneesA3Croissant.length);
-        console.log('📊 A3 decroissant:', donneesA3Decroissant.length);
-        console.log('📊 A301 Croissant:', donneesA301Croissant.length);
-        console.log('📊 A301 decroissant:', donneesA301Decroissant.length);
-        
-        // ====== إنشاء النقاط ======
-        this.genererPointsPK(containers.croissant, donneesA3Croissant, showTues, showBG, showBL, 27000, 430000);
-        this.genererPointsPK(containers.decroissant, donneesA3Decroissant, showTues, showBG, showBL, 27000, 430000);
-        this.genererPointsPK(containers.a301_1, donneesA301Croissant, showTues, showBG, showBL, 0, 13000);
-        this.genererPointsPK(containers.a301_2, donneesA301Decroissant, showTues, showBG, showBL, 0, 13000);
-        
-        // ====== ✅ تحديث العدادات (الاتجاهات) ======
-        document.getElementById('totalCroissant').textContent = donneesA3Croissant.length;
-        document.getElementById('totalDecroissant').textContent = donneesA3Decroissant.length;
-        document.getElementById('totalA301Croissant').textContent = donneesA301Croissant.length;
-        document.getElementById('totalA301Decroissant').textContent = donneesA301Decroissant.length;
-        
-        // ✅ المجموع الكلي
-        const totalAccidents = donneesA3Croissant.length + donneesA3Decroissant.length + 
-                            donneesA301Croissant.length + donneesA301Decroissant.length;
-        document.getElementById('totalAccidentsPK').textContent = totalAccidents;
-        
-        // ====== ✅ حساب Tués, BG, BL ======
         let totalTues = 0, totalBG = 0, totalBL = 0;
         dataSource.forEach(d => {
             totalTues += parseInt(d['_total_tues'] || 0);
-            totalBG += parseInt(d['_total_bg'] || 0);
-            totalBL += parseInt(d['_total_bl'] || 0);
+            totalBG   += parseInt(d['_total_bg']   || 0);
+            totalBL   += parseInt(d['_total_bl']   || 0);
         });
-        document.getElementById('totalTuesPK').textContent = totalTues;
-        document.getElementById('totalBGPK').textContent = totalBG;
-        document.getElementById('totalBLPK').textContent = totalBL;
         
-        console.log('✅ المجموع الكلي:', totalAccidents);
-        console.log('✅ Tués:', totalTues, 'BG:', totalBG, 'BL:', totalBL);
+        const elT = document.getElementById('totalTuesPK');
+        const elB = document.getElementById('totalBGPK');
+        const elL = document.getElementById('totalBLPK');
+        const elTot = document.getElementById('totalAccidentsPK');
+        if (elT) elT.textContent = totalTues;
+        if (elB) elB.textContent = totalBG;
+        if (elL) elL.textContent = totalBL;
+        if (elTot) elTot.textContent = dataSource.length;
+        
+        console.log('✅ PK dessiné:', axesList.length, 'axe(s)');
     },
         
     genererPointsPK: function(container, donnees, showTues, showBG, showBL, pkMin, pkMax) {
-        if (!container) return 0;
-        
-        const donneesFiltreesPK = donnees.filter(d => {
+    if (!container) return 0;
+    
+            // ✅ Protection contre division par zéro
+            const range = (pkMax - pkMin) || 1;
+            
+            const donneesFiltreesPK = donnees.filter(d => {
+
             const pk = parseInt(d['_pk_num'] || 0);
             if (!pk || isNaN(pk) || pk < pkMin || pk > pkMax) return false;
             
@@ -1531,7 +1786,6 @@ const Analyse = {
             return 0;
         }
         
-        const range = pkMax - pkMin;
         const baseTop = 50;
         let html = '';
         
@@ -1645,40 +1899,63 @@ const Intervenants = {
     chart: null,
     donneesFiltrees: [],
     
-    // ====== تهيئة القسم ======
+    // ============================================================
+    // Mapping Type → Clé de délai + Label + Emoji
+    // ============================================================
+    getTypeInfo: function(type) {
+        switch(type) {
+            case 'patrouilleur': return { cle: '_delai_patrouilleur', label: 'Patrouilleur', emoji: '👮' };
+            case 'gr':           return { cle: '_delai_gr',           label: 'GR',           emoji: '🚔' };
+            case 'pc':           return { cle: '_delai_pc',           label: 'Protection Civile', emoji: '🚑' };
+            case 'fourgon':      return { cle: '_delai_fourgon',      label: 'Fourgon Mortelle', emoji: '⚰️' };
+            default:             return { cle: '_delai_gr',           label: 'GR',           emoji: '🚔' };
+        }
+    },
+    
+    // ============================================================
+    // Mapping Type → Configuration des entités (window.*)
+    // ============================================================
+    getEntitesPourType: function(type) {
+        switch(type) {
+            case 'patrouilleur': return window.PATROUILLEURS || [];
+            case 'gr':           return window.GENDARMERIE || [];
+            case 'pc':           return window.PROTECTION_CIVILE || [];
+            case 'fourgon':      return window.FOURGON_MORTELLE || [];
+            default:             return [];
+        }
+    },
+    
+    // ============================================================
+    // INIT
+    // ============================================================
     init: function() {
+        mettreAJourAnneeLabel();
         this.mettreAJourFiltres();
-        this.gererAffichagePMA();  // ← إضافة هذا السطر
+        this.gererAffichageEntite();
         this.appliquerFiltres();
     },
     
-    // ====== تحديث قوائم الفلاتر ======
+    // ============================================================
+    // METTRE À JOUR LES FILTRES
+    // ============================================================
     mettreAJourFiltres: function() {
         const selectTroncon = document.getElementById('intervTronconFilter');
         const selectMois = document.getElementById('intervMoisFilter');
         if (!selectTroncon || !selectMois) return;
         
-        // حفظ التحديدات الحالية
+        // Sauvegarder les sélections actuelles
         const selectedTroncon = Array.from(selectTroncon.selectedOptions).map(opt => opt.value);
         const selectedMois = Array.from(selectMois.selectedOptions).map(opt => opt.value);
         
-        // ---- بناء قائمة المقاطع (مع T2_2) ----
-        const troncons = new Set();
-        toutesLesDonnees.forEach(d => {
-            if (d['_troncon'] && d['_troncon'] !== 'Inconnu') {
-                troncons.add(d['_troncon']);
-            }
-        });
-        
+        // ---- Tronçons dynamiques ----
         selectTroncon.innerHTML = '<option value="all">Tous les tronçons</option>';
-        ['T1', 'T2', 'T2_2', 'T3', 'T4'].forEach(t => {
+        getTronconsActifs().forEach(t => {
             const opt = document.createElement('option');
             opt.value = t;
-            opt.textContent = t + ' (' + getPkRange(t) + ')';
+            opt.textContent = t + ' (' + getPkRangeDynamique(t) + ')';
             selectTroncon.appendChild(opt);
         });
         
-        // استعادة التحديدات
         Array.from(selectTroncon.options).forEach(opt => {
             if (selectedTroncon.includes(opt.value)) opt.selected = true;
         });
@@ -1686,7 +1963,7 @@ const Intervenants = {
             selectTroncon.querySelector('option[value="all"]').selected = true;
         }
         
-        // ---- بناء قائمة الأشهر ----
+        // ---- Mois ----
         const moisExistants = new Set();
         toutesLesDonnees.forEach(d => {
             if (d['_mois'] && d['_mois'] >= 1 && d['_mois'] <= 12) {
@@ -1704,7 +1981,6 @@ const Intervenants = {
             selectMois.appendChild(opt);
         });
         
-        // استعادة التحديدات
         Array.from(selectMois.options).forEach(opt => {
             if (selectedMois.includes(opt.value)) opt.selected = true;
         });
@@ -1712,76 +1988,100 @@ const Intervenants = {
             selectMois.querySelector('option[value="all"]').selected = true;
         }
         
-        // ---- PMA (من الإعدادات) ----
-        const selectPMA = document.getElementById('intervPmaFilter');
-        if (selectPMA) {
-            let pmaData = [];
-            try {
-                const data = localStorage.getItem('config_gendarmerie');
-                if (data) pmaData = JSON.parse(data);
-            } catch(e) {}
-            
-            const val = selectPMA.value;
-            selectPMA.innerHTML = '<option value="all">Toutes les PMA</option>';
-            pmaData.forEach(pma => {
-                const opt = document.createElement('option');
-                opt.value = pma.nom;
-                opt.textContent = pma.nom + ' (' + pma.axe + ')';
-                selectPMA.appendChild(opt);
-            });
-            const existe = pmaData.some(p => p.nom === val);
-            if (existe) selectPMA.value = val;
-            else selectPMA.value = 'all';
+        // ---- Entités (PMA / Patrouilleurs / PC / Fourgon) ----
+        this.rafraichirEntites();
+    },
+    
+    // ============================================================
+    // 🆕 Rafraîchir la liste des entités selon le Type actif
+    // ============================================================
+    rafraichirEntites: function() {
+        const selectEntite = document.getElementById('intervEntiteFilter');
+        const labelEntite = document.getElementById('entiteFilterLabel');
+        if (!selectEntite) return;
+        
+        const type = document.getElementById('intervTypeFilter').value;
+        const entites = this.getEntitesPourType(type);
+        
+        // Mettre à jour le label
+        if (labelEntite) {
+            switch(type) {
+                case 'patrouilleur': labelEntite.textContent = '👮 Patrouille :'; break;
+                case 'gr':           labelEntite.textContent = '🚔 PMA :'; break;
+                case 'pc':           labelEntite.textContent = '🚑 PC :'; break;
+                case 'fourgon':      labelEntite.textContent = '⚰️ Fourgon :'; break;
+                default:             labelEntite.textContent = '📋 Entité :'; break;
+            }
+        }
+        
+        // Sauvegarder la sélection actuelle
+        const valActuelle = selectEntite.value;
+        
+        // Reconstruire la liste
+        selectEntite.innerHTML = '<option value="all">Toutes</option>';
+        const noms = new Set();
+        entites.forEach(e => {
+            if (e.nom) noms.add(e.nom);
+        });
+        Array.from(noms).sort().forEach(nom => {
+            const opt = document.createElement('option');
+            opt.value = nom;
+            opt.textContent = nom;
+            selectEntite.appendChild(opt);
+        });
+        
+        // Restaurer la sélection si elle existe encore
+        if (noms.has(valActuelle)) {
+            selectEntite.value = valActuelle;
+        } else {
+            selectEntite.value = 'all';
         }
     },
     
-    // ====== إظهار/إخفاء فلتر PMA حسب Type ======
-    gererAffichagePMA: function() {
+    // ============================================================
+    // AFFICHER/MASQUER LE FILTRE ENTITÉ SELON LE TYPE
+    // ============================================================
+    gererAffichageEntite: function() {
         const type = document.getElementById('intervTypeFilter').value;
-        const pmaGroup = document.getElementById('pmaFilterGroup');
+        const entiteGroup = document.getElementById('entiteFilterGroup');
         
-        if (!pmaGroup) return;
+        if (!entiteGroup) return;
         
-        // ✅ إظهار فلتر PMA فقط عند اختيار "gr"
-        if (type === 'gr') {
-            pmaGroup.style.display = 'flex';
+        // Types qui ont besoin d'un filtre entité
+        const typesAvecEntites = ['patrouilleur', 'gr', 'pc', 'fourgon'];
+        
+        if (typesAvecEntites.includes(type)) {
+            entiteGroup.style.display = 'flex';
+            this.rafraichirEntites();
         } else {
-            pmaGroup.style.display = 'none';
-            // إعادة تعيين فلتر PMA إلى "all"
-            const pmaSelect = document.getElementById('intervPmaFilter');
-            if (pmaSelect) pmaSelect.value = 'all';
+            entiteGroup.style.display = 'none';
+            const selectEntite = document.getElementById('intervEntiteFilter');
+            if (selectEntite) selectEntite.value = 'all';
         }
         
-        // تطبيق الفلاتر
         this.appliquerFiltres();
     },
-
-    // ====== تطبيق الفلاتر ======
+    
+    // ============================================================
+    // APPLIQUER LES FILTRES
+    // ============================================================
     appliquerFiltres: function() {
         const tronconSelect = document.getElementById('intervTronconFilter');
         const moisSelect = document.getElementById('intervMoisFilter');
         const type = document.getElementById('intervTypeFilter').value;
-        const pma = document.getElementById('intervPmaFilter').value;
+        const entiteSelect = document.getElementById('intervEntiteFilter');
+        const entite = entiteSelect ? entiteSelect.value : 'all';
         
-        // قراءة التحديدات المتعددة
+        if (!tronconSelect || !moisSelect) return;
+        
+        // Lire les sélections multiples
         const tronconValues = Array.from(tronconSelect.selectedOptions).map(opt => opt.value);
         const moisValues = Array.from(moisSelect.selectedOptions).map(opt => opt.value);
         
         const tronconAll = tronconValues.includes('all');
         const moisAll = moisValues.includes('all');
         
-        // تحديد عمود التأخير
-        let cleDelai = '_delai_depannage';
-        let nomColonne = 'Dépannage';
-        let emoji = '🚛';
-        switch(type) {
-            case 'depannage': cleDelai = '_delai_depannage'; nomColonne = 'Dépannage'; emoji = '🚛'; break;
-            case 'patrouilleur': cleDelai = '_delai_patrouilleur'; nomColonne = 'Patrouilleur'; emoji = '👮'; break;
-            case 'gr': cleDelai = '_delai_gr'; nomColonne = 'GR'; emoji = '🚔'; break;
-            case 'pc': cleDelai = '_delai_pc'; nomColonne = 'PC'; emoji = '🚑'; break;
-        }
-        
-        // تصفية البيانات
+        // Filtrer les données
         let donnees = toutesLesDonnees || [];
         donnees = donnees.filter(d => {
             if (!tronconAll && !tronconValues.includes(d['_troncon'])) return false;
@@ -1789,37 +2089,42 @@ const Intervenants = {
             return true;
         });
         
-        // فلتر PMA
-        if (pma !== 'all') {
-            let gendarmerieData = [];
-            try {
-                const data = localStorage.getItem('config_gendarmerie');
-                if (data) gendarmerieData = JSON.parse(data);
-            } catch(e) {}
-            const pmaInfo = gendarmerieData.find(p => p.nom === pma);
-            if (pmaInfo) {
-                const pkMin = parseInt(pmaInfo.pk_min);
-                const pkMax = parseInt(pmaInfo.pk_max);
+        // Filtrer par entité (si sélectionnée)
+        if (entite !== 'all' && type !== 'all') {
+            const entites = this.getEntitesPourType(type);
+            const entiteInfo = entites.find(e => e.nom === entite);
+            if (entiteInfo) {
+                const pkMin = parseInt(entiteInfo.min);
+                const pkMax = parseInt(entiteInfo.max);
+                const axeEntite = entiteInfo.axe;
+                
                 donnees = donnees.filter(d => {
                     const pk = parseInt(d['_pk_num'] || 0);
-                    return pk >= pkMin && pk <= pkMax;
+                    if (pk < pkMin || pk > pkMax) return false;
+                    // Vérifier aussi l'axe
+                    if (axeEntite) {
+                        const info = window.TRONCONS && window.TRONCONS[d['_troncon']];
+                        if (info && info.axe && info.axe !== axeEntite) return false;
+                    }
+                    return true;
                 });
             }
         }
         
         this.donneesFiltrees = donnees;
         
-        // تحديث العرض
         this.mettreAJourStatistiques();
         this.mettreAJourTableau();
         this.mettreAJourGraphique();
     },
     
-    // ====== إعادة تعيين الفلاتر ======
+    // ============================================================
+    // RÉINITIALISER LES FILTRES
+    // ============================================================
     reinitialiserFiltres: function() {
         const tronconSelect = document.getElementById('intervTronconFilter');
         const moisSelect = document.getElementById('intervMoisFilter');
-        const pmaSelect = document.getElementById('intervPmaFilter');
+        const entiteSelect = document.getElementById('intervEntiteFilter');
         const typeSelect = document.getElementById('intervTypeFilter');
         
         if (tronconSelect) {
@@ -1832,36 +2137,41 @@ const Intervenants = {
                 opt.selected = (opt.value === 'all');
             });
         }
-        if (pmaSelect) pmaSelect.value = 'all';
-        if (typeSelect) typeSelect.value = 'depannage';
+        if (entiteSelect) entiteSelect.value = 'all';
+        if (typeSelect) typeSelect.value = 'gr';   // ✅ 'gr' existe dans la liste
         
+        // Masquer le filtre entité si Type = all
+        const entiteGroup = document.getElementById('entiteFilterGroup');
+        if (entiteGroup) entiteGroup.style.display = 'flex';
+        
+        this.rafraichirEntites();
         this.appliquerFiltres();
     },
     
-    // ====== عرض الإحصائيات ======
+    // ============================================================
+    // STATISTIQUES
+    // ============================================================
     mettreAJourStatistiques: function() {
         const donnees = this.donneesFiltrees;
         const type = document.getElementById('intervTypeFilter').value;
-        
-        let cleDelai = '_delai_depannage';
-        switch(type) {
-            case 'depannage': cleDelai = '_delai_depannage'; break;
-            case 'patrouilleur': cleDelai = '_delai_patrouilleur'; break;
-            case 'gr': cleDelai = '_delai_gr'; break;
-            case 'pc': cleDelai = '_delai_pc'; break;
-        }
+        const typeInfo = this.getTypeInfo(type);
+        const cleDelai = typeInfo.cle;
         
         const delais = donnees.map(d => d[cleDelai]).filter(d => d && d !== '--' && d !== '-');
         
+        const elMin = document.getElementById('intervDelaiMin');
+        const elMax = document.getElementById('intervDelaiMax');
+        const elMoy = document.getElementById('intervDelaiMoyen');
+        const elCnt = document.getElementById('intervDelaiCount');
+        
         if (delais.length === 0) {
-            document.getElementById('intervDelaiMin').textContent = '-';
-            document.getElementById('intervDelaiMax').textContent = '-';
-            document.getElementById('intervDelaiMoyen').textContent = '-';
-            document.getElementById('intervDelaiCount').textContent = '0';
+            if (elMin) elMin.textContent = '-';
+            if (elMax) elMax.textContent = '-';
+            if (elMoy) elMoy.textContent = '-';
+            if (elCnt) elCnt.textContent = '0';
             return;
         }
         
-        // ✅ تحويل إلى ثواني واستبعاد القيم الخيالية
         const seuilMax = 6600; // 1:50:00
         const enSecondes = delais.map(t => {
             const parts = t.split(':');
@@ -1871,10 +2181,10 @@ const Intervenants = {
         }).filter(s => s > 0 && s <= seuilMax);
         
         if (enSecondes.length === 0) {
-            document.getElementById('intervDelaiMin').textContent = '-';
-            document.getElementById('intervDelaiMax').textContent = '-';
-            document.getElementById('intervDelaiMoyen').textContent = '-';
-            document.getElementById('intervDelaiCount').textContent = '0';
+            if (elMin) elMin.textContent = '-';
+            if (elMax) elMax.textContent = '-';
+            if (elMoy) elMoy.textContent = '-';
+            if (elCnt) elCnt.textContent = '0';
             return;
         }
         
@@ -1882,36 +2192,32 @@ const Intervenants = {
         const max = Math.max(...enSecondes);
         const moyenne = enSecondes.reduce((a,b) => a+b, 0) / enSecondes.length;
         
-        document.getElementById('intervDelaiMin').textContent = formatTemps(min);
-        document.getElementById('intervDelaiMax').textContent = formatTemps(max);
-        document.getElementById('intervDelaiMoyen').textContent = formatTemps(moyenne);
-        document.getElementById('intervDelaiCount').textContent = enSecondes.length;
+        if (elMin) elMin.textContent = formatTemps(min);
+        if (elMax) elMax.textContent = formatTemps(max);
+        if (elMoy) elMoy.textContent = formatTemps(moyenne);
+        if (elCnt) elCnt.textContent = enSecondes.length;
     },
     
-    // ====== عرض الجدول ======
+    // ============================================================
+    // TABLEAU
+    // ============================================================
     mettreAJourTableau: function() {
         const container = document.getElementById('intervenantsTable');
         if (!container) return;
         
         const donnees = this.donneesFiltrees;
         const type = document.getElementById('intervTypeFilter').value;
-        
-        let cleDelai = '_delai_depannage';
-        let nomColonne = 'Dépannage';
-        let emoji = '🚛';
-        switch(type) {
-            case 'depannage': cleDelai = '_delai_depannage'; nomColonne = 'Dépannage'; emoji = '🚛'; break;
-            case 'patrouilleur': cleDelai = '_delai_patrouilleur'; nomColonne = 'Patrouilleur'; emoji = '👮'; break;
-            case 'gr': cleDelai = '_delai_gr'; nomColonne = 'GR'; emoji = '🚔'; break;
-            case 'pc': cleDelai = '_delai_pc'; nomColonne = 'PC'; emoji = '🚑'; break;
-        }
+        const typeInfo = this.getTypeInfo(type);
+        const cleDelai = typeInfo.cle;
+        const nomColonne = typeInfo.label;
+        const emoji = typeInfo.emoji;
         
         if (donnees.length === 0) {
             container.innerHTML = `<div class="status-empty"><h3>📭 Aucune donnée</h3><p>Ajustez les filtres ou chargez des fichiers</p></div>`;
             return;
         }
         
-        // تجميع البيانات
+        // Grouper par mois + tronçon
         const parMoisTroncon = {};
         donnees.forEach(d => {
             const mois = d['_nom_mois'] || 'Inconnu';
@@ -1923,7 +2229,7 @@ const Intervenants = {
             parMoisTroncon[mois][troncon].push(delai);
         });
         
-        // حساب المتوسطات
+        // Calculer les moyennes
         const resultats = {};
         for (const [mois, troncons] of Object.entries(parMoisTroncon)) {
             resultats[mois] = {};
@@ -1932,7 +2238,7 @@ const Intervenants = {
             }
         }
         
-        const ordreTroncons = ['T1', 'T2', 'T2_2', 'T3', 'T4'];
+        const ordreTroncons = getTronconsActifs();   // ✅ dynamique
         const ordreMois = ['Janvier','Février','Mars','Avril','Mai','Juin',
                            'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
         
@@ -1974,7 +2280,9 @@ const Intervenants = {
         container.innerHTML = html;
     },
     
-    // ====== عرض المنحنى ======
+    // ============================================================
+    // GRAPHIQUE
+    // ============================================================
     mettreAJourGraphique: function() {
         const ctx = document.getElementById('intervChart');
         if (!ctx) return;
@@ -1985,48 +2293,50 @@ const Intervenants = {
         
         if (donnees.length === 0) return;
         
-        // ====== 1. جمع البيانات لكل نوع ======
+        // Grouper les délais par mois pour chaque type
         const parMois = {
             patrouilleur: {},
             gr: {},
-            pc: {}
+            pc: {},
+            fourgon: {}
         };
         
         donnees.forEach(d => {
             const mois = d['_nom_mois'] || 'Inconnu';
             if (mois === 'Inconnu') return;
             
-            // Patrouilleur
             const delaiPat = d['_delai_patrouilleur'];
             if (delaiPat) {
                 if (!parMois.patrouilleur[mois]) parMois.patrouilleur[mois] = [];
                 parMois.patrouilleur[mois].push(delaiPat);
             }
             
-            // GR
             const delaiGR = d['_delai_gr'];
             if (delaiGR) {
                 if (!parMois.gr[mois]) parMois.gr[mois] = [];
                 parMois.gr[mois].push(delaiGR);
             }
             
-            // PC
             const delaiPC = d['_delai_pc'];
             if (delaiPC) {
                 if (!parMois.pc[mois]) parMois.pc[mois] = [];
                 parMois.pc[mois].push(delaiPC);
             }
+            
+            const delaiFourgon = d['_delai_fourgon'];
+            if (delaiFourgon) {
+                if (!parMois.fourgon[mois]) parMois.fourgon[mois] = [];
+                parMois.fourgon[mois].push(delaiFourgon);
+            }
         });
         
-        // ====== 2. ترتيب الأشهر ======
         const ordreMois = ['Janvier','Février','Mars','Avril','Mai','Juin',
                         'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
         
-        // جمع جميع الأشهر الموجودة
         const moisSet = new Set();
-        Object.keys(parMois.patrouilleur).forEach(m => moisSet.add(m));
-        Object.keys(parMois.gr).forEach(m => moisSet.add(m));
-        Object.keys(parMois.pc).forEach(m => moisSet.add(m));
+        Object.values(parMois).forEach(obj => {
+            Object.keys(obj).forEach(m => moisSet.add(m));
+        });
         
         const moisExistants = Array.from(moisSet).filter(m => m !== 'Inconnu')
             .sort((a, b) => ordreMois.indexOf(a) - ordreMois.indexOf(b));
@@ -2035,7 +2345,6 @@ const Intervenants = {
         
         const labels = moisExistants;
         
-        // ====== 3. حساب المتوسطات ======
         function calculerDonnees(parMoisType) {
             return moisExistants.map(m => {
                 const moyenne = moyenneTemps(parMoisType[m]);
@@ -2047,18 +2356,13 @@ const Intervenants = {
             });
         }
         
-        const dataPatrouilleur = calculerDonnees(parMois.patrouilleur);
-        const dataGR = calculerDonnees(parMois.gr);
-        const dataPC = calculerDonnees(parMois.pc);
-        
-        // ====== 4. بناء مجموعة البيانات ======
         const datasets = [];
         
-        // Patrouilleur (أزرق)
+        // Patrouilleur (bleu)
         if (type === 'patrouilleur' || type === 'all') {
             datasets.push({
                 label: '👮 Patrouilleur',
-                data: dataPatrouilleur,
+                data: calculerDonnees(parMois.patrouilleur),
                 borderColor: '#2d7db8',
                 backgroundColor: 'rgba(45,125,184,0.1)',
                 fill: true,
@@ -2069,11 +2373,11 @@ const Intervenants = {
             });
         }
         
-        // GR (برتقالي)
+        // GR (orange)
         if (type === 'gr' || type === 'all') {
             datasets.push({
                 label: '🚔 GR',
-                data: dataGR,
+                data: calculerDonnees(parMois.gr),
                 borderColor: '#e67e22',
                 backgroundColor: 'rgba(230,126,34,0.1)',
                 fill: true,
@@ -2084,11 +2388,11 @@ const Intervenants = {
             });
         }
         
-        // PC (أخضر)
+        // Protection Civile (vert)
         if (type === 'pc' || type === 'all') {
             datasets.push({
-                label: '🚑 PC',
-                data: dataPC,
+                label: '🚑 Protection Civile',
+                data: calculerDonnees(parMois.pc),
                 borderColor: '#27ae60',
                 backgroundColor: 'rgba(39,174,96,0.1)',
                 fill: true,
@@ -2099,12 +2403,26 @@ const Intervenants = {
             });
         }
         
-        // ====== 5. خط 25 دقيقة لـ Patrouilleur ======
+        // Fourgon Mortelle (violet)
+        if (type === 'fourgon' || type === 'all') {
+            datasets.push({
+                label: '⚰️ Fourgon Mortelle',
+                data: calculerDonnees(parMois.fourgon),
+                borderColor: '#6c5ce7',
+                backgroundColor: 'rgba(108,92,231,0.1)',
+                fill: true,
+                tension: 0.3,
+                pointBackgroundColor: '#4834d4',
+                pointRadius: 4,
+                spanGaps: true
+            });
+        }
+        
+        // Seuil 25 min pour Patrouilleur
         if (type === 'patrouilleur' || type === 'all') {
-            const seuilPatrouilleur = 25 * 60;
             datasets.push({
                 label: 'Seuil 25 min',
-                data: Array(labels.length).fill(seuilPatrouilleur),
+                data: Array(labels.length).fill(25 * 60),
                 borderColor: 'rgba(231, 76, 60, 0.4)',
                 borderDash: [8, 8],
                 borderWidth: 2,
@@ -2116,13 +2434,9 @@ const Intervenants = {
         
         if (datasets.length === 0) return;
         
-        // ====== 6. إنشاء الرسم ======
         this.chart = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels: labels,
-                datasets: datasets
-            },
+            data: { labels: labels, datasets: datasets },
             options: {
                 responsive: true,
                 plugins: {
@@ -2139,9 +2453,6 @@ const Intervenants = {
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                if (context.dataset.label.includes('Seuil')) {
-                                    return context.dataset.label + ': ' + formatTemps(context.parsed.y);
-                                }
                                 return context.dataset.label + ': ' + formatTemps(context.parsed.y);
                             }
                         }
@@ -2151,15 +2462,13 @@ const Intervenants = {
                     y: {
                         beginAtZero: true,
                         ticks: {
-                            callback: function(value) {
-                                return formatTemps(value);
-                            }
+                            callback: function(value) { return formatTemps(value); }
                         }
                     }
                 }
             }
         });
-    },
+    }
 };
 
 // ============================================================
@@ -2172,6 +2481,7 @@ const Depanneurs = {
     
     // ====== تهيئة القسم ======
     init: function() {
+        mettreAJourAnneeLabel();
         this.mettreAJourFiltres();
         this.appliquerFiltres();
     },
@@ -2190,18 +2500,13 @@ const Depanneurs = {
         const selectedSociete = Array.from(selectSociete.selectedOptions).map(opt => opt.value);
         
         // ---- بناء قائمة المقاطع (مع T2_2) ----
-        const troncons = new Set();
-        toutesLesDonnees.forEach(d => {
-            if (d['_troncon'] && d['_troncon'] !== 'Inconnu') {
-                troncons.add(d['_troncon']);
-            }
-        });
+        
         
         selectTroncon.innerHTML = '<option value="all">Tous les tronçons</option>';
-        ['T1', 'T2', 'T2_2', 'T3', 'T4'].forEach(t => {
+        getTronconsActifs().forEach(t => {
             const opt = document.createElement('option');
             opt.value = t;
-            opt.textContent = t + ' (' + getPkRange(t) + ')';
+            opt.textContent = t + ' (' + getPkRangeDynamique(t) + ')';
             selectTroncon.appendChild(opt);
         });
         
@@ -2237,55 +2542,173 @@ const Depanneurs = {
             selectMois.querySelector('option[value="all"]').selected = true;
         }
         
-        // ---- بناء قائمة الشركات ----
-        // ====== ✅ بناء قائمة الشركات (تصفية حسب الفلاتر النشطة) ======
+                // ---- بناء قائمة الشركات ----
+       // ---- بناء قائمة الشركات ----
+        // ====== Filtrage à 3 dimensions :
+        //   📅 Année  → depuis _annee des données chargées
+        //   📅 Mois   → depuis le filtre Mois (si actif)
+        //   📍 PK     → depuis le filtre Tronçon (si actif)
+        // ======
+        const drrActif = (typeof Parametres !== 'undefined' && Parametres.directionActive)
+                        || window.directionActiveCourante
+                        || 'DRRS';
+        
+        let societesConfig = [];
+        try {
+            const dataConfig = localStorage.getItem('config_' + drrActif + '_societes');
+            if (dataConfig) societesConfig = JSON.parse(dataConfig);
+        } catch(e) {
+            console.warn('⚠️ Impossible de lire config_' + drrActif + '_societes');
+        }
+        
+        // Récupérer les filtres actifs
+        const tronconSelectValues = Array.from(selectTroncon.selectedOptions).map(opt => opt.value);
+        const moisSelectValues = Array.from(selectMois.selectedOptions).map(opt => opt.value);
+        const tronconAllFiltre = tronconSelectValues.includes('all');
+        const moisAllFiltre = moisSelectValues.includes('all');
+        
+        // ========== ÉTAPE 1 : Récupérer les ANNÉES présentes dans les données ==========
+        const anneesSet = new Set();
+        
+        toutesLesDonnees.forEach(d => {
+            // Priorité 1 : champ "_annee" (rempli au chargement)
+            if (d['_annee'] && parseInt(d['_annee']) > 0) {
+                anneesSet.add(parseInt(d['_annee']));
+                return;
+            }
+            // Priorité 2 : extraire depuis les dates
+            const dateVal = d['Date prise en charge'] || d['Date et heure accident'];
+            if (!dateVal && dateVal !== 0) return;
             
-            // 1. Récupérer les filtres actifs
-            const tronconSelectValues = Array.from(selectTroncon.selectedOptions).map(opt => opt.value);
-            const moisSelectValues = Array.from(selectMois.selectedOptions).map(opt => opt.value);
-            const tronconAllFiltre = tronconSelectValues.includes('all');
-            const moisAllFiltre = moisSelectValues.includes('all');
+            let annee = null;
+            if (typeof dateVal === 'number') {
+                const dt = new Date((dateVal - 25569) * 86400 * 1000);
+                if (!isNaN(dt)) annee = dt.getFullYear();
+            } else if (typeof dateVal === 'string') {
+                const m = dateVal.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+                if (m) annee = parseInt(m[3]);
+            }
+            if (annee) anneesSet.add(annee);
+        });
+        
+        const anneesList = Array.from(anneesSet).sort();
+        console.log('📅 [Sociétés] Années détectées:', anneesList);
+        
+        // ========== ÉTAPE 2 : Construire les PÉRIODES de référence (Année × Mois) ==========
+        // Chaque période = {debut, fin, label} à tester contre les sociétés
+        const periodes = [];
+        
+        if (anneesList.length > 0) {
+            if (moisAllFiltre) {
+                // Toute l'année pour chaque année
+                anneesList.forEach(an => {
+                    periodes.push({
+                        debut: new Date(an, 0, 1),
+                        fin:   new Date(an, 11, 31),
+                        label: String(an)
+                    });
+                });
+            } else {
+                // Croiser chaque année × chaque mois sélectionné
+                anneesList.forEach(an => {
+                    moisSelectValues.forEach(mStr => {
+                        const m = parseInt(mStr);
+                        if (m >= 1 && m <= 12) {
+                            periodes.push({
+                                debut: new Date(an, m - 1, 1),
+                                fin:   new Date(an, m, 0),  // dernier jour du mois
+                                label: mStr + '/' + an
+                            });
+                        }
+                    });
+                });
+            }
+        }
+        
+        console.log('📅 [Sociétés] Périodes de référence:',
+                    periodes.map(p => p.label).join(', ') || 'aucune');
+        
+        // ========== ÉTAPE 3 : Construire les PLAGES PK des tronçons sélectionnés ==========
+        let pkRanges = [];
+        if (!tronconAllFiltre) {
+            pkRanges = tronconSelectValues.map(tId => {
+                const info = window.TRONCONS && window.TRONCONS[tId];
+                if (!info) return null;
+                return {
+                    id: tId,
+                    min: parseInt(info.min),
+                    max: parseInt(info.max),
+                    axe: info.axe
+                };
+            }).filter(x => x);
+        }
+        console.log('📍 [Sociétés] PK ranges:', pkRanges.map(r => r.id + ':' + r.min + '-' + r.max).join(', ') || 'tous');
+        
+        // ========== ÉTAPE 4 : Filtrer les sociétés ==========
+        const societes = new Set();
+        
+        societesConfig.forEach(s => {
+            if (!s.nom || s.nom.trim() === '') return;
+            const sNom = s.nom.trim();
+            const sPkMin = parseInt(s.pk_min) || 0;
+            const sPkMax = parseInt(s.pk_max) || 0;
+            const sAxe = s.axe || null;
             
-            // 2. Filtrer les données selon les filtres actifs
-            const donneesFiltreesPourSocietes = toutesLesDonnees.filter(d => {
-                // Filtre Tronçon
-                if (!tronconAllFiltre && !tronconSelectValues.includes(d['_troncon'])) return false;
-                
-                // Filtre Mois
-                if (!moisAllFiltre && !moisSelectValues.includes(String(d['_mois']))) return false;
-                
-                // Seulement les accidents avec un délai de dépannage
-                if (!d['_delai_depannage'] || d['_delai_depannage'] === '--' || d['_delai_depannage'] === '-') return false;
-                
-                return true;
-            });
-            
-            // 3. Extraire les sociétés uniques de ces données filtrées
-            const societes = new Set();
-            donneesFiltreesPourSocietes.forEach(d => {
-                if (d['_societe'] && d['_societe'] !== 'Inconnue') {
-                    societes.add(d['_societe']);
+            // ---------- Filtre A : CHEVAUCHEMENT PK ----------
+            if (!tronconAllFiltre && pkRanges.length > 0) {
+                let chevauchementPK = false;
+                for (const r of pkRanges) {
+                    if (sPkMax >= r.min && sPkMin <= r.max) {
+                        if (r.axe && sAxe && r.axe !== sAxe) continue;
+                        chevauchementPK = true;
+                        break;
+                    }
                 }
-            });
+                if (!chevauchementPK) {
+                    console.log('⛔ [Exclue - hors PK]', sNom,
+                                '| PK:', sPkMin, '-', sPkMax,
+                                '| filtre:', pkRanges.map(r => r.id).join(', '));
+                    return;
+                }
+            }
             
-            // Trier alphabétiquement
-            const societesTriees = Array.from(societes).sort();
+            // ---------- Filtre B : CHEVAUCHEMENT DE PÉRIODE ----------
+            if (periodes.length > 0 && (s.date_entree || s.date_sortie)) {
+                const dateEntree = s.date_entree ? new Date(s.date_entree) : new Date('1900-01-01');
+                const dateSortie = s.date_sortie ? new Date(s.date_sortie) : new Date('2100-12-31');
+                
+                // Chevauchement avec AU MOINS une période
+                const chevauche = periodes.some(p => {
+                    return !(dateSortie < p.debut || dateEntree > p.fin);
+                });
+                
+                if (!chevauche) {
+                    console.log('⛔ [Exclue - hors période]', sNom,
+                                '| société:', s.date_entree, '→', s.date_sortie,
+                                '| périodes testées:', periodes.map(p => p.label).join(', '));
+                    return;
+                }
+            }
             
-            console.log('📊 Sociétés disponibles (après filtres):', societesTriees);
-            console.log('   - Tronçons sélectionnés:', tronconSelectValues);
-            console.log('   - Mois sélectionnés:', moisSelectValues);
-            console.log('   - Accidents filtrés:', donneesFiltreesPourSocietes.length);
+            // ✅ Société retenue
+            societes.add(sNom);
+        });
+        
+        console.log('✅ [Sociétés] Retenues (' + societes.size + '):', Array.from(societes).sort());
+        
+        // Trier alphabétiquement
+        const societesTriees = Array.from(societes).sort();
+        
+        // Reconstruire la liste
+        selectSociete.innerHTML = '<option value="all">Toutes les sociétés</option>';
+        societesTriees.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = s;
+            selectSociete.appendChild(opt);
+        });
             
-            // 4. Reconstruire la liste
-            selectSociete.innerHTML = '<option value="all">Toutes les sociétés</option>';
-            societesTriees.forEach(s => {
-                const opt = document.createElement('option');
-                opt.value = s;
-                opt.textContent = s;
-                selectSociete.appendChild(opt);
-            });
-            
-            // 5. Restaurer les sélections précédentes SI elles existent encore
+            // 6. Restaurer les sélections précédentes SI elles existent encore
             Array.from(selectSociete.options).forEach(opt => {
                 if (selectedSociete.includes(opt.value) && opt.value !== 'all') {
                     opt.selected = true;
@@ -2301,7 +2724,7 @@ const Depanneurs = {
             if (selectedSociete.length > 0 && !selectedSociete.includes('all')) {
                 const existeEncore = selectedSociete.some(s => societes.has(s));
                 if (!existeEncore) {
-                    console.log('⚠️ La société sélectionnée n\'existe plus dans les données filtrées → retour à "Toutes"');
+                    console.log('⚠️ Société sélectionnée introuvable → retour à "Toutes"');
                     selectSociete.querySelector('option[value="all"]').selected = true;
                 }
             }
@@ -2361,11 +2784,12 @@ const Depanneurs = {
             });
         }
         
-        // ✅ إعادة تعيين فلتر Type Véhicule إلى "Tous"
         if (typeSelect) {
             typeSelect.value = 'all';
         }
         
+        // ✅ Reconstruire la liste des sociétés après réinitialisation
+        this.mettreAJourFiltres();
         this.appliquerFiltres();
     },
         
@@ -2708,6 +3132,86 @@ const Depanneurs = {
 };
 
 // ============================================================
+// 🆕 PLUGIN : Étiquettes externes avec flèches pour les doughnuts
+// ============================================================
+const doughnutExternalLabelsPlugin = {
+    id: 'doughnutExternalLabels',
+    afterDatasetsDraw: function(chart) {
+        if (chart.config.type !== 'doughnut') return;
+        
+        const ctx = chart.ctx;
+        const meta = chart.getDatasetMeta(0);
+        if (!meta || !meta.data || meta.data.length === 0) return;
+        
+        const dataset = chart.data.datasets[0];
+        const total = dataset.data.reduce((a, b) => a + (b || 0), 0);
+        if (total === 0) return;
+        
+        chart.data.labels.forEach(function(label, i) {
+            const value = dataset.data[i] || 0;
+            if (value === 0) return;
+            
+            const arc = meta.data[i];
+            if (!arc) return;
+            
+            const centerAngle = (arc.startAngle + arc.endAngle) / 2;
+            const outerRadius = arc.outerRadius;
+            const cx = arc.x;
+            const cy = arc.y;
+            
+            const cos = Math.cos(centerAngle);
+            const sin = Math.sin(centerAngle);
+            
+            // Point sur l'arc
+            const x1 = cx + cos * outerRadius;
+            const y1 = cy + sin * outerRadius;
+            
+            // Point du coude
+            const x2 = cx + cos * (outerRadius + 15);
+            const y2 = cy + sin * (outerRadius + 15);
+            
+            // Point final (aligné horizontalement)
+            const isRight = cos >= 0;
+            const elbowLength = 40;
+            const x3 = isRight ? x2 + elbowLength : x2 - elbowLength;
+            const y3 = y2;
+            
+            ctx.save();
+            
+            // Ligne coudée
+            ctx.strokeStyle = '#aaa';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.lineTo(x3, y3);
+            ctx.stroke();
+            
+            // Petit point sur l'arc (raccord)
+            ctx.beginPath();
+            ctx.arc(x1, y1, 3, 0, Math.PI * 2);
+            ctx.fillStyle = dataset.backgroundColor[i] || '#999';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            
+            // Texte
+            const percentage = ((value / total) * 100).toFixed(1);
+            const text = label + ' : ' + value + ' (' + percentage + '%)';
+            
+            ctx.fillStyle = '#1a3a5c';
+            ctx.font = '600 12px "Segoe UI", Arial, sans-serif';
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = isRight ? 'left' : 'right';
+            ctx.fillText(text, x3 + (isRight ? 6 : -6), y3);
+            
+            ctx.restore();
+        });
+    }
+};
+
+// ============================================================
 // SECTION GRAPHIQUES (DASHBOARD)
 // ============================================================
 
@@ -2727,23 +3231,18 @@ const Graphiques = {
         if (!selectTroncon || !selectMois) return;
         
         // ---- Tronçons (avec T2_2) ----
-        const troncons = new Set();
-        toutesLesDonnees.forEach(d => {
-            if (d['_troncon'] && d['_troncon'] !== 'Inconnu') {
-                troncons.add(d['_troncon']);
-            }
-        });
-        
+        // ---- Tronçons dynamiques selon DRR actif ----
         const valTroncon = selectTroncon.value;
         selectTroncon.innerHTML = '<option value="all">Tous les tronçons</option>';
-        ['T1', 'T2', 'T2_2', 'T3', 'T4'].forEach(t => {
+        getTronconsActifs().forEach(t => {
             const opt = document.createElement('option');
             opt.value = t;
-            opt.textContent = t + ' (' + getPkRange(t) + ')';
+            opt.textContent = t + ' (' + getPkRangeDynamique(t) + ')';
             selectTroncon.appendChild(opt);
         });
-        if (troncons.has(valTroncon)) selectTroncon.value = valTroncon;
-        else selectTroncon.value = 'all';
+        // Restaurer la sélection si elle existe encore
+        const tronconExisteEncore = Array.from(selectTroncon.options).some(opt => opt.value === valTroncon);
+        selectTroncon.value = tronconExisteEncore ? valTroncon : 'all';
         
         // ---- Mois ----
         const moisExistants = new Set();
@@ -2766,28 +3265,85 @@ const Graphiques = {
         else selectMois.value = 'all';
     },
     
-    // ====== تطبيق الفلاتر ======
+     // ====== تطبيق الفلاتر (avec liaison en cascade) ======
     appliquerFiltres: function() {
         const troncon = document.getElementById('graphTronconFilter').value;
         const mois = document.getElementById('graphMoisFilter').value;
+        const semaine = document.getElementById('graphSemaineFilter').value;
+        const jour = document.getElementById('graphJourFiltre').value;
+        const heure = document.getElementById('graphHeureFiltre').value;
         
-        // تصفية البيانات
-        let donnees = toutesLesDonnees.filter(d => {
+        // ===== BASE : Tronçon + Mois =====
+        const donneesBase = toutesLesDonnees.filter(d => {
             if (troncon !== 'all' && d['_troncon'] !== troncon) return false;
             if (mois !== 'all' && d['_mois'] !== parseInt(mois)) return false;
             return true;
         });
         
-        // Mettre à jour KPI
-        this.mettreAJourKPI(donnees);
+        // ===== Helpers internes =====
+        const extraireSemaine = (d) => {
+            const dateVal = d['Date prise en charge'] || d['Date et heure accident'];
+            if (!dateVal && dateVal !== 0) return null;
+            
+            let dateObj = null;
+            if (typeof dateVal === 'number') {
+                dateObj = new Date((dateVal - 25569) * 86400 * 1000);
+            } else if (typeof dateVal === 'string') {
+                let m = dateVal.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+                if (m) dateObj = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+                else dateObj = new Date(dateVal);
+            }
+            
+            if (!dateObj || isNaN(dateObj)) return null;
+            const annee = dateObj.getFullYear();
+            const debutAnnee = new Date(annee, 0, 1);
+            const diff = (dateObj - debutAnnee) / 86400000;
+            return Math.ceil((diff + debutAnnee.getDay() + 1) / 7);
+        };
         
-        // Mettre à jour les graphiques
-        this.mettreAJourGraphiqueMensuel(donnees);
-        this.mettreAJourGraphiqueJournalier(donnees);
-        this.mettreAJourGraphiquePeriode(donnees);
-        this.mettreAJourGraphiqueCause(donnees);
-        this.mettreAJourGraphiqueGravite(donnees);
-        this.mettreAJourGraphiqueVictimes(donnees);
+        const extraireHeureNum = (d) => {
+            const h = d['_heure_accident'];
+            if (!h) return null;
+            return parseInt(h.split(':')[0]);
+        };
+        
+        // ===== Filtre HEURE appliqué à tous (le plus spécifique) =====
+        const filtreHeure = (arr) => {
+            if (heure === 'all') return arr;
+            return arr.filter(d => extraireHeureNum(d) === parseInt(heure));
+        };
+        
+        // ===== Filtre JOUR =====
+        const filtreJour = (arr) => {
+            if (jour === 'all') return arr;
+            return arr.filter(d => d['_jour_semaine'] === jour);
+        };
+        
+        // ===== Filtre SEMAINE =====
+        const filtreSemaine = (arr) => {
+            if (semaine === 'all') return arr;
+            return arr.filter(d => extraireSemaine(d) === parseInt(semaine));
+        };
+        
+        // ===== 1. KPI + Doughnuts : TOUS les filtres =====
+        const donneesFinales = filtreHeure(filtreJour(filtreSemaine(donneesBase)));
+        this.mettreAJourKPI(donneesFinales);
+        this.mettreAJourGraphiqueCause(donneesFinales);
+        this.mettreAJourGraphiqueGravite(donneesFinales);
+        this.mettreAJourGraphiqueVictimes(donneesFinales);
+        
+        // ===== 2. Hebdomadaire : base ∩ jour ∩ heure =====
+        // (le chart filtre par semaine en interne pour ses labels)
+        const donneesPourSemaine = filtreHeure(filtreJour(donneesBase));
+        this.mettreAJourGraphiqueMensuel(donneesPourSemaine);
+        
+        // ===== 3. Journalier : base ∩ semaine ∩ heure =====
+        const donneesPourJour = filtreHeure(filtreSemaine(donneesBase));
+        this.mettreAJourGraphiqueJournalier(donneesPourJour);
+        
+        // ===== 4. Période (24h) : base ∩ semaine ∩ jour =====
+        const donneesPourHeure = filtreJour(filtreSemaine(donneesBase));
+        this.mettreAJourGraphiquePeriode(donneesPourHeure);
     },
     
     // ====== Réinitialiser ======
@@ -2818,8 +3374,40 @@ const Graphiques = {
             }
         });
         // ✅ حساب متوسط على أساس عدد الأيام الفعلية
-        const nbJoursReels = getDaysInRange(donnees);
-        document.getElementById('kpiMoyenne').textContent = (donnees.length / nbJoursReels).toFixed(1) + '/jour';
+                // ✅ Moyenne par jour — basé sur le nombre de jours UNIQUES
+        const joursUniques = new Set();
+        donnees.forEach(d => {
+            const dateVal = d['Date prise en charge'] || d['Date et heure accident'];
+            if (!dateVal && dateVal !== 0) return;
+            
+            try {
+                let dateObj;
+                if (typeof dateVal === 'number') {
+                    dateObj = new Date((dateVal - 25569) * 86400 * 1000);
+                } else if (typeof dateVal === 'string') {
+                    // Formats "DD-MM-YYYY" ou "DD/MM/YYYY"
+                    let m = dateVal.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+                    if (m) {
+                        dateObj = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+                    } else {
+                        dateObj = new Date(dateVal);
+                    }
+                } else if (dateVal instanceof Date) {
+                    dateObj = dateVal;
+                }
+                
+                if (dateObj && !isNaN(dateObj)) {
+                    const key = dateObj.getFullYear() + '-' + 
+                                String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + 
+                                String(dateObj.getDate()).padStart(2, '0');
+                    joursUniques.add(key);
+                }
+            } catch(e) {}
+        });
+        
+        const nbJours = joursUniques.size || 1;
+        document.getElementById('kpiMoyenne').textContent = (donnees.length / nbJours).toFixed(1) + '/jour';
+        
         // Jour le plus dangereux
         // Jour le plus dangereux (avec conversion correcte)
         const parJour = {};
@@ -2874,17 +3462,36 @@ const Graphiques = {
             if (c > maxMoisCount) { maxMoisCount = c; maxMois = m; }
         }
         document.getElementById('kpiMoisDangereux').textContent = maxMois + ' (' + maxMoisCount + ')';
-        // Cause principale
+        // Cause principale (filtrer les valeurs vides)
         const causes = {};
         donnees.forEach(d => {
-            const c = d['Cause principale'] || 'Non spécifiée';
+            let c = d['Cause principale'] !== undefined ? String(d['Cause principale']).trim() : '';
+            if (c === '' || c === '--' || c === '-' || c === 'N/A' || c === 'n/a') {
+                c = 'Non spécifiée';
+            }
             causes[c] = (causes[c] || 0) + 1;
         });
         let maxCause = '-', maxCauseCount = 0;
         for (const [c, cnt] of Object.entries(causes)) {
             if (cnt > maxCauseCount) { maxCauseCount = cnt; maxCause = c; }
         }
-        document.getElementById('kpiCause').textContent = maxCause + ' (' + maxCauseCount + ')';
+        
+        // ✅ Affichage adapté
+        if (maxCause === 'Non spécifiée' && maxCauseCount > 0) {
+            // La colonne est vide dans le fichier Excel
+            document.getElementById('kpiCause').textContent = '❓ Non renseignée';
+            document.getElementById('kpiCause').style.color = '#999';
+            document.getElementById('kpiCause').style.fontSize = '0.85em';
+            document.getElementById('kpiCause').title = 'La colonne "Cause principale" est vide dans le fichier Excel';
+        } else if (maxCause && maxCause !== '-') {
+            document.getElementById('kpiCause').textContent = maxCause + ' (' + maxCauseCount + ')';
+            document.getElementById('kpiCause').style.color = '';
+            document.getElementById('kpiCause').style.fontSize = '';
+            document.getElementById('kpiCause').title = '';
+        } else {
+            document.getElementById('kpiCause').textContent = '-';
+        }
+
         
         // Tronçon le plus dangereux (seulement par mois, pas par tronçon)
         const troncons = {};
@@ -2897,6 +3504,54 @@ const Graphiques = {
             if (c > maxTronconCount) { maxTronconCount = c; maxTroncon = t; }
         }
         document.getElementById('kpiTroncon').textContent = maxTroncon + ' (' + maxTronconCount + ')';
+// ✅ Période analysée
+        let dMin = null, dMax = null;
+        donnees.forEach(d => {
+            const dateVal = d['Date prise en charge'] || d['Date et heure accident'];
+            if (!dateVal && dateVal !== 0) return;
+            
+            let dObj = null;
+            if (typeof dateVal === 'number') {
+                dObj = new Date((dateVal - 25569) * 86400 * 1000);
+            } else if (typeof dateVal === 'string') {
+                const m = dateVal.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+                if (m) dObj = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+                else dObj = new Date(dateVal);
+            }
+            if (dObj && !isNaN(dObj)) {
+                if (!dMin || dObj < dMin) dMin = dObj;
+                if (!dMax || dObj > dMax) dMax = dObj;
+            }
+        });
+        
+        const elPeriode = document.getElementById('kpiPeriode');
+        if (elPeriode) {
+            if (dMin && dMax) {
+                const fmt = (dt) => String(dt.getDate()).padStart(2,'0') + '/' 
+                                 + String(dt.getMonth()+1).padStart(2,'0') + '/' 
+                                 + dt.getFullYear();
+                elPeriode.textContent = fmt(dMin) + ' → ' + fmt(dMax);
+                elPeriode.style.fontSize = '0.6em';
+            } else {
+                elPeriode.textContent = '-';
+            }
+        }
+        // ✅ Total Victimes
+        let vTues = 0, vBG = 0, vBL = 0;
+        donnees.forEach(d => {
+            vTues += parseInt(d['_total_tues'] || 0);
+            vBG   += parseInt(d['_total_bg']   || 0);
+            vBL   += parseInt(d['_total_bl']   || 0);
+        });
+        
+        const elVict = document.getElementById('kpiVictimes');
+        if (elVict) {
+            const total = vTues + vBG + vBL;
+            elVict.textContent = total;
+            elVict.title = '🔴 Tués: ' + vTues + ' | 🟠 BG: ' + vBG + ' | 🟢 BL: ' + vBL;
+        }
+
+
     },
     
     // ====== 1. Graphique: Évolution mensuelle (colonnes) ======
@@ -3178,6 +3833,7 @@ const Graphiques = {
             },
             options: {
                 responsive: true,
+                
                 plugins: {
                     legend: { position: 'bottom' },
                     tooltip: {
@@ -3195,6 +3851,7 @@ const Graphiques = {
     },
     
     // ====== 5. Graphique: Répartition par Gravité (doughnut) ======
+    // ====== 5. Graphique: Répartition par Gravité (doughnut + étiquettes externes) ======
     mettreAJourGraphiqueGravite: function(donnees) {
         const ctx = document.getElementById('graphChartGravite');
         if (!ctx) return;
@@ -3217,6 +3874,17 @@ const Graphiques = {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,   // ✅ AJOUTER CETTE LIGNE
+
+                // ✅ Padding pour faire de la place aux étiquettes externes
+                layout: {
+                    padding: {
+                        top: 20,
+                        bottom: 20,
+                        left: 100,
+                        right: 100
+                    }
+                },
                 plugins: {
                     legend: { position: 'bottom' },
                     tooltip: {
@@ -3229,11 +3897,13 @@ const Graphiques = {
                         }
                     }
                 }
-            }
+            },
+            // ✅ Enregistrer le plugin pour ce graphique
+            plugins: [doughnutExternalLabelsPlugin]
         });
     },
     
-    // ====== 6. Graphique: Répartition des Victimes (doughnut) ======
+     // ====== 6. Graphique: Répartition des Victimes (doughnut + étiquettes externes) ======
     mettreAJourGraphiqueVictimes: function(donnees) {
         const ctx = document.getElementById('graphChartVictimes');
         if (!ctx) return;
@@ -3263,6 +3933,16 @@ const Graphiques = {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,   // ✅ AJOUTER CETTE LIGNE
+                // ✅ Padding pour faire de la place aux étiquettes externes
+                layout: {
+                    padding: {
+                        top: 20,
+                        bottom: 20,
+                        left: 100,
+                        right: 100
+                    }
+                },
                 plugins: {
                     legend: { position: 'bottom' },
                     tooltip: {
@@ -3275,72 +3955,340 @@ const Graphiques = {
                         }
                     }
                 }
-            }
+            },
+            // ✅ Enregistrer le plugin pour ce graphique
+            plugins: [doughnutExternalLabelsPlugin]
         });
     }
 };
+
+
 // ============================================================
-// 10. SECTION PARAMÈTRES
+// 10. SECTION PARAMÈTRES - Version Multi-DRR
 // ============================================================
 
 const Parametres = {
-    directions: ['DRRS', 'DRRC', 'DRRN', 'DRRO'],
+    directions: ['DRRS', 'DRRN', 'DRRC', 'DRRO', 'DRRE'],
+    directionActive: 'DRRS',
     
-    // ====== 1. CHARGER LES DONNÉES PAR DÉFAUT ======
+   
+    // ============================================================
+    // CHANGEMENT DE DRR (avec réinitialisation complète)
+    // ============================================================
+    changerDRR: function(drr) {
+        console.log('🔄 ===== Changement de DRR: ' + drr + ' =====');
+        this.directionActive = drr;
+        window.directionActiveCourante = drr;
+        
+        try {
+            localStorage.setItem('drr_actif', drr);
+        } catch(e) {}
+        
+        // Étape 1 : Mettre à jour l'apparence des boutons DRR
+        document.querySelectorAll('.drr-tab').forEach(btn => {
+            if (btn.dataset.drr === drr) {
+                btn.classList.add('active');
+                btn.style.background = '#2d7db8';
+                btn.style.color = 'white';
+                btn.style.border = '2px solid #2d7db8';
+            } else {
+                btn.classList.remove('active');
+                btn.style.background = 'white';
+                btn.style.color = '#1a3a5c';
+                btn.style.border = '2px solid #d0d8e0';
+            }
+        });
+        
+        const drrNom = document.getElementById('drrActifNom');
+        if (drrNom) drrNom.textContent = drr;
+        // ✅ Mettre à jour le nom dans la sidebar
+        const sidebarDrr = document.getElementById('sidebarDrrName');
+        if (sidebarDrr) sidebarDrr.textContent = drr;
+        
+        // Étape 2 : Mettre à jour les constantes + ré-enrichir les données
+        // (Utilise le NOUVEAU directionActive pour lire la config correcte)
+        this.mettreAJourConstantes();
+        
+        // Étape 3 : 🆕 Réinitialiser TOUS les filtres de toutes les sections
+        this.reinitialiserTousLesFiltres();
+        
+       // Étape 4 : Recharger les tableaux de paramètres
+        this.afficherTroncons();
+        this.afficherSocietes();
+        this.afficherGendarmerie();
+        this.afficherPatrouilleurs();
+        this.afficherProtectionCivile();
+        this.afficherFourgonMortelle();
+        
+        // Étape 5 : Rafraîchir tous les onglets (reconstruit les dropdowns)
+        this.rafraichirTousLesOnglets();
+        this.restaurerEtatCards();
+        
+        console.log('✅ ===== DRR actif: ' + drr + ' =====');
+    },
+    // ============================================================
+    // CARDS PLIABLES
+    // ============================================================
+    basculerCard: function(cardId) {
+        const card = document.querySelector(`.param-card[data-card="${cardId}"]`);
+        if (!card) return;
+        
+        card.classList.toggle('collapsed');
+        
+        // Sauvegarder l'état (par DRR)
+        const etats = JSON.parse(localStorage.getItem('params_cards_state') || '{}');
+        const cle = this.directionActive + '_' + cardId;
+        etats[cle] = card.classList.contains('collapsed');
+        localStorage.setItem('params_cards_state', JSON.stringify(etats));
+    },
+    
+    restaurerEtatCards: function() {
+        const etats = JSON.parse(localStorage.getItem('params_cards_state') || '{}');
+        const cards = document.querySelectorAll('.param-card[data-card]');
+        cards.forEach(card => {
+            const cardId = card.dataset.card;
+            const cle = this.directionActive + '_' + cardId;
+            if (etats[cle] === true) {
+                card.classList.add('collapsed');
+            } else {
+                card.classList.remove('collapsed');
+            }
+        });
+    },
+
+     // ============================================================
+    // BASCULER LA SECTION "Configuration (Admin)"
+    // ============================================================
+    basculerExportConfig: function() {
+        const body = document.getElementById('exportConfigBody');
+        const icon = document.getElementById('exportConfigToggleIcon');
+        if (!body) return;
+        
+        const estCache = body.style.display === 'none';
+        body.style.display = estCache ? 'block' : 'none';
+        if (icon) icon.textContent = estCache ? '▼' : '▶';
+        
+        try {
+            localStorage.setItem('export_config_collapsed', estCache ? 'false' : 'true');
+        } catch(e) {}
+    },
+    
+    restaurerEtatExportConfig: function() {
+        try {
+            const collapsed = localStorage.getItem('export_config_collapsed');
+            if (collapsed === 'true') {
+                const body = document.getElementById('exportConfigBody');
+                const icon = document.getElementById('exportConfigToggleIcon');
+                if (body) body.style.display = 'none';
+                if (icon) icon.textContent = '▶';
+            }
+        } catch(e) {}
+    },
+
+    // ============================================================
+    // RÉINITIALISER TOUS LES FILTRES (appelé lors du changement de DRR)
+    // Chaque section repart de zéro avec les nouveaux paramètres du DRR
+    // ============================================================
+    reinitialiserTousLesFiltres: function() {
+        console.log('🧹 Réinitialisation de tous les filtres...');
+        
+        // --- Helpers ---
+        const resetMulti = (id) => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            Array.from(sel.options).forEach(opt => {
+                opt.selected = (opt.value === 'all');
+            });
+        };
+        
+        const resetSelect = (id, val) => {
+            const sel = document.getElementById(id);
+            if (sel) sel.value = val;
+        };
+        
+        const resetCheck = (id, val) => {
+            const cb = document.getElementById(id);
+            if (cb) cb.checked = val;
+        };
+        
+        // ========== 1. ANALYSE ==========
+        resetMulti('analyseTronconFilter');
+        resetMulti('analyseMoisFilter');
+        resetCheck('filterTues', true);
+        resetCheck('filterBG', true);
+        resetCheck('filterBL', true);
+        
+        // ========== 2. INTERVENANTS ==========
+        resetMulti('intervTronconFilter');
+        resetMulti('intervMoisFilter');
+        resetSelect('intervTypeFilter', 'all');
+        resetSelect('intervEntiteFilter', 'all');
+        
+        // Masquer le filtre entité (car Type = all)
+        const entiteGroup = document.getElementById('entiteFilterGroup');
+        if (entiteGroup) entiteGroup.style.display = 'none';
+        
+        // ========== 3. DÉPANNEURS ==========
+        resetMulti('depTronconFilter');
+        resetMulti('depMoisFilter');
+        resetMulti('depSocieteFilter');
+        resetSelect('depTypeFilter', 'all');
+        
+        // ========== 4. GRAPHIQUES ==========
+        resetSelect('graphTronconFilter', 'all');
+        resetSelect('graphMoisFilter', 'all');
+        resetSelect('graphSemaineFilter', 'all');
+        resetSelect('graphJourFiltre', 'all');
+        resetSelect('graphHeureFiltre', 'all');
+        resetSelect('graphCauseType', 'principale');
+        
+        // ========== 5. RAPPROCHEMENT ==========
+        resetMulti('rappTronconFilter');
+        resetMulti('rappMoisFilter');
+        
+        // ========== 6. ZACC (état interne + boutons) ==========
+        if (typeof ZACC !== 'undefined') {
+            ZACC.pariteActuelle = 'paire';
+            ZACC.directionActuelle = 'tous';
+            
+            const btnPaire = document.getElementById('zaccBtnPaire');
+            const btnImpaire = document.getElementById('zaccBtnImpaire');
+            const btnTous = document.getElementById('zaccBtnTous');
+            const btnCroissant = document.getElementById('zaccBtnCroissant');
+            const btnDecroissant = document.getElementById('zaccBtnDecroissant');
+            
+            if (btnPaire) {
+                btnPaire.style.background = '#2d7db8';
+                btnPaire.style.color = 'white';
+                btnPaire.style.border = '2px solid #2d7db8';
+            }
+            if (btnImpaire) {
+                btnImpaire.style.background = 'white';
+                btnImpaire.style.color = '#1a3a5c';
+                btnImpaire.style.border = '2px solid #d0d8e0';
+            }
+            if (btnTous) {
+                btnTous.style.background = '#2d7db8';
+                btnTous.style.color = 'white';
+                btnTous.style.border = '2px solid #2d7db8';
+            }
+            if (btnCroissant) {
+                btnCroissant.style.background = 'white';
+                btnCroissant.style.color = '#1a3a5c';
+                btnCroissant.style.border = '2px solid #d0d8e0';
+            }
+            if (btnDecroissant) {
+                btnDecroissant.style.background = 'white';
+                btnDecroissant.style.color = '#1a3a5c';
+                btnDecroissant.style.border = '2px solid #d0d8e0';
+            }
+        }
+        
+        console.log('✅ Tous les filtres réinitialisés');
+    },
+    rafraichirTousLesOnglets: function() {
+        console.log('🔄 Rafraîchissement de tous les onglets...');
+        
+        if (typeof Analyse !== 'undefined' && Analyse.init) Analyse.init();
+        if (typeof Intervenants !== 'undefined' && Intervenants.init) Intervenants.init();
+        if (typeof Depanneurs !== 'undefined' && Depanneurs.init) Depanneurs.init();
+        
+        if (typeof Graphiques !== 'undefined') {
+            if (Graphiques.mettreAJourFiltres) Graphiques.mettreAJourFiltres();
+            if (Graphiques.appliquerFiltres) Graphiques.appliquerFiltres();
+        }
+        
+        if (typeof ZACC !== 'undefined' && ZACC.appliquerFiltres) {
+            ZACC.appliquerFiltres();
+        }
+        
+        console.log('✅ Tous les onglets rafraîchis');
+    },
+    
+    // ============================================================
+    // CLÉS localStorage PAR DRR
+    // ============================================================
+    getCleConfig: function(type) {
+        return 'config_' + this.directionActive + '_' + type;
+    },
+    
+    // ============================================================
+    // DONNÉES PAR DÉFAUT
+    // ============================================================
     getDefaultData: function() {
         return {
             troncons: [
-                { id: 'T1', direction: 'DRRS', axe: 'A3', pk_min: 27000, pk_max: 106000 },
-                { id: 'T2', direction: 'DRRS', axe: 'A3', pk_min: 106000, pk_max: 198000 },
-                { id: 'T2_2', direction: 'DRRS', axe: 'A301', pk_min: 0, pk_max: 13000 },
-                { id: 'T3', direction: 'DRRS', axe: 'A3', pk_min: 198000, pk_max: 282000 },
-                { id: 'T4', direction: 'DRRS', axe: 'A3', pk_min: 282000, pk_max: 430000 }
+                { id: 'T1', axe: 'A3', pk_min: 27000, pk_max: 106000 },
+                { id: 'T2', axe: 'A3', pk_min: 106001, pk_max: 198000 },
+                { id: 'T2_2', axe: 'A301', pk_min: 0, pk_max: 13000 },
+                { id: 'T3', axe: 'A3', pk_min: 198001, pk_max: 282000 },
+                { id: 'T4', axe: 'A3', pk_min: 282001, pk_max: 430000 }
             ],
             societes: [
-                { nom: 'TransAlmahata 1', direction: 'DRRS', axe: 'A3', pk_min: 27000, pk_max: 65000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
-                { nom: 'TransAlmahata 2', direction: 'DRRS', axe: 'A3', pk_min: 65000, pk_max: 127000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
-                { nom: 'Ezziraoui', direction: 'DRRS', axe: 'A3', pk_min: 127000, pk_max: 160000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
-                { nom: 'INT Assistance', direction: 'DRRS', axe: 'A3', pk_min: 160000, pk_max: 249000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
-                { nom: 'INT Assistance', direction: 'DRRS', axe: 'A301', pk_min: 0, pk_max: 13000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
-                { nom: 'Routier Multi Service et INT Assistance', direction: 'DRRS', axe: 'A3', pk_min: 249000, pk_max: 310000, date_entree: '2024-01-01', date_sortie: '2026-12-31' },
-                { nom: 'Essalam', direction: 'DRRS', axe: 'A3', pk_min: 310000, pk_max: 430000, date_entree: '2024-01-01', date_sortie: '2024-12-31' },
-                { nom: 'Grand Sud', direction: 'DRRS', axe: 'A3', pk_min: 310000, pk_max: 430000, date_entree: '2025-01-01', date_sortie: '2026-12-31' }
+                { nom: 'TransAlmahata 1', axe: 'A3', pk_min: 27000, pk_max: 65000, date_entree: '2010-01-01', date_sortie: '2028-12-31' },
+                { nom: 'TransAlmahata 2', axe: 'A3', pk_min: 65001, pk_max: 127000, date_entree: '2010-01-01', date_sortie: '2028-12-31' },
+                { nom: 'Ezziraoui', axe: 'A3', pk_min: 127001, pk_max: 160000, date_entree: '2025-04-01', date_sortie: '2028-12-31' },
+                { nom: 'INT Assistance', axe: 'A3', pk_min: 160001, pk_max: 249000, date_entree: '2025-04-01', date_sortie: '2028-12-31' },
+                { nom: 'INT Assistance', axe: 'A301', pk_min: 0, pk_max: 13000, date_entree: '2025-04-01', date_sortie: '2028-12-31' },
+                { nom: 'Routier Multi Service et INT Assistance', axe: 'A3', pk_min: 249001, pk_max: 310000, date_entree: '2025-04-01', date_sortie: '2028-12-31' },
+                { nom: 'Grand Sud', axe: 'A3', pk_min: 310001, pk_max: 430000, date_entree: '2025-04-01', date_sortie: '2028-12-31' },
+                { nom: 'Essalam Assistance', axe: 'A3', pk_min: 199001, pk_max: 430000, date_entree: '2010-01-01', date_sortie: '2025-03-31' },
+                { nom: 'INSAF Secour', axe: 'A3', pk_min: 127001, pk_max: 199000, date_entree: '2010-01-01', date_sortie: '2025-03-31' },
+                { nom: 'INSAF Secour', axe: 'A301', pk_min: 0, pk_max: 13000, date_entree: '2010-01-01', date_sortie: '2025-03-31' }
             ],
             gendarmerie: [
-                { nom: 'PMA Settat', direction: 'DRRS', axe: 'A3', pk_min: 27000, pk_max: 106000 },
-                { nom: 'PMA Skhour', direction: 'DRRS', axe: 'A3', pk_min: 106000, pk_max: 140000 },
-                { nom: 'PMA Bengurir', direction: 'DRRS', axe: 'A3', pk_min: 140000, pk_max: 187000 },
-                { nom: 'PMA Palmeraie', direction: 'DRRS', axe: 'A3', pk_min: 187000, pk_max: 198000 },
-                { nom: 'PMA Palmeraie', direction: 'DRRS', axe: 'A301', pk_min: 0, pk_max: 13000 },
-                { nom: 'PMA Targa', direction: 'DRRS', axe: 'A3', pk_min: 198000, pk_max: 246500 },
-                { nom: 'PMA Chihcaoua', direction: 'DRRS', axe: 'A3', pk_min: 246500, pk_max: 290000 },
-                { nom: 'PMA Imintanout', direction: 'DRRS', axe: 'A3', pk_min: 290000, pk_max: 380000 },
-                { nom: 'PMA Amskroud', direction: 'DRRS', axe: 'A3', pk_min: 380000, pk_max: 430000 }
-            ]
+                { nom: 'PMA Settat', axe: 'A3', pk_min: 27000, pk_max: 106000 },
+                { nom: 'PMA Skhour', axe: 'A3', pk_min: 106001, pk_max: 140000 },
+                { nom: 'PMA Bengurir', axe: 'A3', pk_min: 140001, pk_max: 187000 },
+                { nom: 'PMA Palmeraie', axe: 'A3', pk_min: 187001, pk_max: 198000 },
+                { nom: 'PMA Palmeraie', axe: 'A301', pk_min: 0, pk_max: 13000 },
+                { nom: 'PMA Targa', axe: 'A3', pk_min: 198001, pk_max: 246500 },
+                { nom: 'PMA Chihcaoua', axe: 'A3', pk_min: 246501, pk_max: 290000 },
+                { nom: 'PMA Imintanout', axe: 'A3', pk_min: 290001, pk_max: 380000 },
+                { nom: 'PMA Amskroud', axe: 'A3', pk_min: 380001, pk_max: 430000 }
+            ],
+            patrouilleurs: [],
+            protectionCivile: [],
+            fourgonMortelle: []
         };
     },
     
-    // ====== 2. LIRE LES DONNÉES DEPUIS localStorage ======
+    getDefaultDataForDRR: function(drr) {
+        if (drr === 'DRRS') {
+            return this.getDefaultData();
+        }
+        return {
+            troncons: [],
+            societes: [],
+            gendarmerie: [],
+            patrouilleurs: [],
+            protectionCivile: [],
+            fourgonMortelle: []
+        };
+    },
+    
+    // ============================================================
+    // CHARGER / SAUVEGARDER (par DRR)
+    // ============================================================
     chargerDonnees: function(type) {
-        const key = 'config_' + type;
+        const key = this.getCleConfig(type);
         try {
             const data = localStorage.getItem(key);
             if (data) {
                 const parsed = JSON.parse(data);
-                if (parsed && parsed.length > 0) {
-                    return parsed;
-                }
+                if (parsed && Array.isArray(parsed)) return parsed;
             }
         } catch(e) {}
-        return this.getDefaultData()[type] || [];
+        
+        const defaults = this.getDefaultDataForDRR(this.directionActive);
+        return defaults[type] || [];
     },
     
-    // ====== 3. SAUVEGARDER DANS localStorage ======
     sauvegarderDonnees: function(type, data) {
-        const key = 'config_' + type;
+        const key = this.getCleConfig(type);
         try {
             localStorage.setItem(key, JSON.stringify(data));
-            console.log('💾 Config sauvegardée:', type, data.length, 'éléments');
+            console.log('💾 Config sauvegardée:', key, data.length, 'éléments');
             return true;
         } catch(e) {
             console.warn('❌ Erreur sauvegarde config:', e);
@@ -3348,106 +4296,36 @@ const Parametres = {
         }
     },
     
-    // ====== 4. AFFICHER LES DIRECTIONS ======
-    afficherDirections: function() {
-        const container = document.getElementById('directionsList');
-        if (!container) return;
-        
-        const directions = this.chargerDonnees('directions') || ['DRRS'];
-        const troncons = this.chargerDonnees('troncons');
-        
-        const currentDirection = toutesLesDonnees[0]?.['_direction'] || 'DRRS';
-        
-        container.innerHTML = directions.map(d => {
-            const hasData = troncons.some(t => t.direction === d);
-            const isActive = (d === currentDirection);
-            const isEmpty = !hasData;
-            
-            let style = 'padding:8px 16px; border-radius:20px; font-size:14px; font-weight:600; display:inline-flex; align-items:center; gap:10px; cursor:pointer;';
-            
-            if (isActive && !isEmpty) {
-                style += 'background:#27ae60; color:white;'; // أخضر (الحالية)
-            } else if (isActive && isEmpty) {
-                style += 'background:#f39c12; color:white;'; // برتقالي (حالية لكن بدون بيانات)
-            } else if (!isEmpty) {
-                style += 'background:#2d7db8; color:white;'; // أزرق (متاحة)
-            } else {
-                style += 'background:#95a5a6; color:white; opacity:0.6;'; // رمادي (فارغة)
-            }
-            
-            return `<span class="axe-tag" style="${style}" onclick="Parametres.gererClicDirection('${d}')">
-                    ${d}
-                    ${isActive ? ' 🔵' : ''}
-                    ${isEmpty ? ' ⚠️' : ''}
-                    <button onclick="event.stopPropagation(); Parametres.supprimerDirection('${d}')" 
-                            style="background:transparent; border:none; color:white; cursor:pointer; font-size:16px; margin-left:5px;">✕</button>
-                </span>`;
-        }).join('');
-    },
-    // ====== 5. AJOUTER UNE DIRECTION ======
-    ajouterDirection: function() {
-        const nom = prompt('Entrez le nom de la nouvelle Direction (ex: DRRS, DRRC, DRRN, DRRO):');
-        if (!nom || nom.trim() === '') return;
-        const nomTrim = nom.trim().toUpperCase();
-        
-        let directions = this.chargerDonnees('directions') || ['DRRS'];
-        if (directions.includes(nomTrim)) {
-            alert('Cette Direction existe déjà!');
-            return;
-        }
-        directions.push(nomTrim);
-        this.sauvegarderDonnees('directions', directions);
-        this.afficherDirections();
-    },
-    
-    // ====== 6. SUPPRIMER UNE DIRECTION ======
-    supprimerDirection: function(nom) {
-        if (!confirm(`Voulez-vous vraiment supprimer la Direction "${nom}" ?`)) return;
-        let directions = this.chargerDonnees('directions') || ['DRRS'];
-        directions = directions.filter(d => d !== nom);
-        if (directions.length === 0) directions = ['DRRS'];
-        this.sauvegarderDonnees('directions', directions);
-        this.afficherDirections();
-    },
-    
-    // ====== 7. AFFICHER LES TRONÇONS ======
+    // ============================================================
+    // AFFICHER LES TRONÇONS
+    // ============================================================
     afficherTroncons: function() {
         const data = this.chargerDonnees('troncons');
-        const directions = this.chargerDonnees('directions') || ['DRRS'];
         const tbody = document.getElementById('tronconsBody');
         if (!tbody) return;
         
         tbody.innerHTML = data.map((item, index) => `
             <tr>
-                <td><input type="text" value="${item.id}" data-index="${index}" data-field="id" class="editable" style="width:70px;"></td>
-                <td>
-                    <select data-index="${index}" data-field="direction" class="editable" style="width:100px;">
-                        ${directions.map(d => `<option value="${d}" ${d === item.direction ? 'selected' : ''}>${d}</option>`).join('')}
-                    </select>
-                </td>
-                <td><input type="text" value="${item.axe}" data-index="${index}" data-field="axe" class="editable" style="width:70px;"></td>
-                <td><input type="number" value="${item.pk_min}" data-index="${index}" data-field="pk_min" class="editable" style="width:90px;"></td>
-                <td><input type="number" value="${item.pk_max}" data-index="${index}" data-field="pk_max" class="editable" style="width:90px;"></td>
+                <td><input type="text" value="${item.id || ''}" data-index="${index}" data-field="id" class="editable" style="width:70px;"></td>
+                <td><input type="text" value="${item.axe || ''}" data-index="${index}" data-field="axe" class="editable" style="width:70px;"></td>
+                <td><input type="number" value="${item.pk_min || 0}" data-index="${index}" data-field="pk_min" class="editable" style="width:90px;"></td>
+                <td><input type="number" value="${item.pk_max || 0}" data-index="${index}" data-field="pk_max" class="editable" style="width:90px;"></td>
                 <td><button class="btn-delete" onclick="Parametres.supprimerLigne('troncons', ${index})">🗑️</button></td>
             </tr>
         `).join('');
     },
     
-    // ====== 8. AFFICHER LES SOCIÉTÉS ======
+    // ============================================================
+    // AFFICHER LES SOCIÉTÉS
+    // ============================================================
     afficherSocietes: function() {
         const data = this.chargerDonnees('societes');
-        const directions = this.chargerDonnees('directions') || ['DRRS'];
         const tbody = document.getElementById('societesBody');
         if (!tbody) return;
         
         tbody.innerHTML = data.map((item, index) => `
             <tr>
                 <td><input type="text" value="${item.nom || ''}" data-index="${index}" data-field="nom" class="editable" style="width:150px;"></td>
-                <td>
-                    <select data-index="${index}" data-field="direction" class="editable" style="width:100px;">
-                        ${directions.map(d => `<option value="${d}" ${d === item.direction ? 'selected' : ''}>${d}</option>`).join('')}
-                    </select>
-                </td>
                 <td><input type="text" value="${item.axe || ''}" data-index="${index}" data-field="axe" class="editable" style="width:70px;"></td>
                 <td><input type="number" value="${item.pk_min || 0}" data-index="${index}" data-field="pk_min" class="editable" style="width:90px;"></td>
                 <td><input type="number" value="${item.pk_max || 0}" data-index="${index}" data-field="pk_max" class="editable" style="width:90px;"></td>
@@ -3458,47 +4336,162 @@ const Parametres = {
         `).join('');
     },
     
-    // ====== 9. AFFICHER LA GENDARMERIE ======
+    // ============================================================
+    // AFFICHER LA GENDARMERIE
+    // ============================================================
     afficherGendarmerie: function() {
         const data = this.chargerDonnees('gendarmerie');
-        const directions = this.chargerDonnees('directions') || ['DRRS'];
         const tbody = document.getElementById('gendarmerieBody');
         if (!tbody) return;
         
         tbody.innerHTML = data.map((item, index) => `
             <tr>
-                <td><input type="text" value="${item.nom}" data-index="${index}" data-field="nom" class="editable" style="width:130px;"></td>
-                <td>
-                    <select data-index="${index}" data-field="direction" class="editable" style="width:100px;">
-                        ${directions.map(d => `<option value="${d}" ${d === item.direction ? 'selected' : ''}>${d}</option>`).join('')}
-                    </select>
-                </td>
-                <td><input type="text" value="${item.axe}" data-index="${index}" data-field="axe" class="editable" style="width:70px;"></td>
-                <td><input type="number" value="${item.pk_min}" data-index="${index}" data-field="pk_min" class="editable" style="width:90px;"></td>
-                <td><input type="number" value="${item.pk_max}" data-index="${index}" data-field="pk_max" class="editable" style="width:90px;"></td>
+                <td><input type="text" value="${item.nom || ''}" data-index="${index}" data-field="nom" class="editable" style="width:150px;"></td>
+                <td><input type="text" value="${item.axe || ''}" data-index="${index}" data-field="axe" class="editable" style="width:70px;"></td>
+                <td><input type="number" value="${item.pk_min || 0}" data-index="${index}" data-field="pk_min" class="editable" style="width:90px;"></td>
+                <td><input type="number" value="${item.pk_max || 0}" data-index="${index}" data-field="pk_max" class="editable" style="width:90px;"></td>
                 <td><button class="btn-delete" onclick="Parametres.supprimerLigne('gendarmerie', ${index})">🗑️</button></td>
             </tr>
         `).join('');
     },
+
+    // ============================================================
+    // AFFICHER LES PATROUILLEURS
+    // ============================================================
+    afficherPatrouilleurs: function() {
+        const data = this.chargerDonnees('patrouilleurs');
+        const tbody = document.getElementById('patrouilleursBody');
+        if (!tbody) return;
+        tbody.innerHTML = data.map((item, index) => `
+            <tr>
+                <td><input type="text" value="${item.id || ''}" data-index="${index}" data-field="id" class="editable" style="width:90px;"></td>
+                <td><input type="text" value="${item.axe || ''}" data-index="${index}" data-field="axe" class="editable" style="width:70px;"></td>
+                <td><input type="number" value="${item.pk_min || 0}" data-index="${index}" data-field="pk_min" class="editable" style="width:90px;"></td>
+                <td><input type="number" value="${item.pk_max || 0}" data-index="${index}" data-field="pk_max" class="editable" style="width:90px;"></td>
+                <td><button class="btn-delete" onclick="Parametres.supprimerLigne('patrouilleurs', ${index})">🗑️</button></td>
+            </tr>
+        `).join('');
+    },
+
+    // ============================================================
+    // AFFICHER LA PROTECTION CIVILE
+    // ============================================================
+    afficherProtectionCivile: function() {
+        const data = this.chargerDonnees('protectionCivile');
+        const tbody = document.getElementById('protectionCivileBody');
+        if (!tbody) return;
+        tbody.innerHTML = data.map((item, index) => `
+            <tr>
+                <td><input type="text" value="${item.id || ''}" data-index="${index}" data-field="id" class="editable" style="width:90px;"></td>
+                <td><input type="text" value="${item.axe || ''}" data-index="${index}" data-field="axe" class="editable" style="width:70px;"></td>
+                <td><input type="number" value="${item.pk_min || 0}" data-index="${index}" data-field="pk_min" class="editable" style="width:90px;"></td>
+                <td><input type="number" value="${item.pk_max || 0}" data-index="${index}" data-field="pk_max" class="editable" style="width:90px;"></td>
+                <td><button class="btn-delete" onclick="Parametres.supprimerLigne('protectionCivile', ${index})">🗑️</button></td>
+            </tr>
+        `).join('');
+    },
+
+    // ============================================================
+    // AFFICHER LE FOURGON MORTELLE
+    // ============================================================
+    afficherFourgonMortelle: function() {
+        const data = this.chargerDonnees('fourgonMortelle');
+        const tbody = document.getElementById('fourgonMortelleBody');
+        if (!tbody) return;
+        tbody.innerHTML = data.map((item, index) => `
+            <tr>
+                <td><input type="text" value="${item.id || ''}" data-index="${index}" data-field="id" class="editable" style="width:90px;"></td>
+                <td><input type="text" value="${item.axe || ''}" data-index="${index}" data-field="axe" class="editable" style="width:70px;"></td>
+                <td><input type="number" value="${item.pk_min || 0}" data-index="${index}" data-field="pk_min" class="editable" style="width:90px;"></td>
+                <td><input type="number" value="${item.pk_max || 0}" data-index="${index}" data-field="pk_max" class="editable" style="width:90px;"></td>
+                <td><button class="btn-delete" onclick="Parametres.supprimerLigne('fourgonMortelle', ${index})">🗑️</button></td>
+            </tr>
+        `).join('');
+    },
+
+    // ============================================================
+    // AJOUTER DES LIGNES
+    // ============================================================
+    ajouterPatrouilleur: function() {
+        const data = this.chargerDonnees('patrouilleurs');
+        data.push({ id: 'PAT' + (data.length + 1), axe: 'A3', pk_min: 0, pk_max: 0 });
+        this.sauvegarderDonnees('patrouilleurs', data);
+        this.afficherPatrouilleurs();
+    },
+
+    ajouterProtectionCivile: function() {
+        const data = this.chargerDonnees('protectionCivile');
+        data.push({ id: 'PC' + (data.length + 1), axe: 'A3', pk_min: 0, pk_max: 0 });
+        this.sauvegarderDonnees('protectionCivile', data);
+        this.afficherProtectionCivile();
+    },
+
+    ajouterFourgonMortelle: function() {
+        const data = this.chargerDonnees('fourgonMortelle');
+        data.push({ id: 'FM' + (data.length + 1), axe: 'A3', pk_min: 0, pk_max: 0 });
+        this.sauvegarderDonnees('fourgonMortelle', data);
+        this.afficherFourgonMortelle();
+    },
+
+    // ============================================================
+    // SAUVEGARDER LES MODIFICATIONS
+    // ============================================================
+    sauvegarderPatrouilleurs: function() {
+        const inputs = document.querySelectorAll('#patrouilleursBody .editable');
+        const data = this.chargerDonnees('patrouilleurs');
+        inputs.forEach(input => {
+            const index = parseInt(input.dataset.index);
+            const field = input.dataset.field;
+            if (data[index]) data[index][field] = input.value;
+        });
+        this.sauvegarderDonnees('patrouilleurs', data);
+        alert('✅ Patrouilleurs sauvegardés!');
+        this.mettreAJourConstantes();
+    },
+
+    sauvegarderProtectionCivile: function() {
+        const inputs = document.querySelectorAll('#protectionCivileBody .editable');
+        const data = this.chargerDonnees('protectionCivile');
+        inputs.forEach(input => {
+            const index = parseInt(input.dataset.index);
+            const field = input.dataset.field;
+            if (data[index]) data[index][field] = input.value;
+        });
+        this.sauvegarderDonnees('protectionCivile', data);
+        alert('✅ Protection Civile sauvegardée!');
+        this.mettreAJourConstantes();
+    },
+
+    sauvegarderFourgonMortelle: function() {
+        const inputs = document.querySelectorAll('#fourgonMortelleBody .editable');
+        const data = this.chargerDonnees('fourgonMortelle');
+        inputs.forEach(input => {
+            const index = parseInt(input.dataset.index);
+            const field = input.dataset.field;
+            if (data[index]) data[index][field] = input.value;
+        });
+        this.sauvegarderDonnees('fourgonMortelle', data);
+        alert('✅ Fourgon Mortelle sauvegardé!');
+        this.mettreAJourConstantes();
+    },
     
-    // ====== 10. AJOUTER DES LIGNES ======
+    // ============================================================
+    // AJOUTER DES LIGNES
+    // ============================================================
     ajouterTroncon: function() {
         const data = this.chargerDonnees('troncons');
-        const directions = this.chargerDonnees('directions') || ['DRRS'];
         const newId = 'T' + (data.length + 1);
-        data.push({ id: newId, direction: directions[0] || 'DRRS', axe: 'A3', pk_min: 0, pk_max: 0 });
+        data.push({ id: newId, axe: 'A3', pk_min: 0, pk_max: 0 });
         this.sauvegarderDonnees('troncons', data);
         this.afficherTroncons();
     },
     
     ajouterSociete: function() {
         const data = this.chargerDonnees('societes');
-        const directions = this.chargerDonnees('directions') || ['DRRS'];
-        data.push({ 
-            nom: 'Nouvelle Société', 
-            direction: directions[0] || 'DRRS', 
-            axe: 'A3', 
-            pk_min: 0, 
+        data.push({
+            nom: 'Nouvelle Société',
+            axe: 'A3',
+            pk_min: 0,
             pk_max: 0,
             date_entree: '2024-01-01',
             date_sortie: '2026-12-31'
@@ -3509,13 +4502,14 @@ const Parametres = {
     
     ajouterGendarmerie: function() {
         const data = this.chargerDonnees('gendarmerie');
-        const directions = this.chargerDonnees('directions') || ['DRRS'];
-        data.push({ nom: 'Nouvelle PMA', direction: directions[0] || 'DRRS', axe: 'A3', pk_min: 0, pk_max: 0 });
+        data.push({ nom: 'Nouvelle PMA', axe: 'A3', pk_min: 0, pk_max: 0 });
         this.sauvegarderDonnees('gendarmerie', data);
         this.afficherGendarmerie();
     },
     
-    // ====== 11. SUPPRIMER UNE LIGNE ======
+    // ============================================================
+    // SUPPRIMER UNE LIGNE
+    // ============================================================
     supprimerLigne: function(type, index) {
         if (!confirm('Voulez-vous vraiment supprimer cette ligne ?')) return;
         const data = this.chargerDonnees(type);
@@ -3525,19 +4519,22 @@ const Parametres = {
             case 'troncons': this.afficherTroncons(); break;
             case 'societes': this.afficherSocietes(); break;
             case 'gendarmerie': this.afficherGendarmerie(); break;
+            case 'patrouilleurs': this.afficherPatrouilleurs(); break;
+            case 'protectionCivile': this.afficherProtectionCivile(); break;
+            case 'fourgonMortelle': this.afficherFourgonMortelle(); break;
         }
     },
     
-    // ====== 12. SAUVEGARDER LES MODIFICATIONS ======
+    // ============================================================
+    // SAUVEGARDER LES MODIFICATIONS
+    // ============================================================
     sauvegarderTroncons: function() {
         const inputs = document.querySelectorAll('#tronconsBody .editable');
         const data = this.chargerDonnees('troncons');
         inputs.forEach(input => {
             const index = parseInt(input.dataset.index);
             const field = input.dataset.field;
-            if (data[index]) {
-                data[index][field] = input.value;
-            }
+            if (data[index]) data[index][field] = input.value;
         });
         this.sauvegarderDonnees('troncons', data);
         alert('✅ Tronçons sauvegardés!');
@@ -3550,9 +4547,7 @@ const Parametres = {
         inputs.forEach(input => {
             const index = parseInt(input.dataset.index);
             const field = input.dataset.field;
-            if (data[index]) {
-                data[index][field] = input.value;
-            }
+            if (data[index]) data[index][field] = input.value;
         });
         this.sauvegarderDonnees('societes', data);
         alert('✅ Sociétés sauvegardées!');
@@ -3565,26 +4560,27 @@ const Parametres = {
         inputs.forEach(input => {
             const index = parseInt(input.dataset.index);
             const field = input.dataset.field;
-            if (data[index]) {
-                data[index][field] = input.value;
-            }
+            if (data[index]) data[index][field] = input.value;
         });
         this.sauvegarderDonnees('gendarmerie', data);
         alert('✅ Gendarmerie sauvegardée!');
         this.mettreAJourConstantes();
     },
     
-    // ====== 13. METTRE À JOUR LES CONSTANTES ======
+    // ============================================================
+    // METTRE À JOUR LES CONSTANTES
+    // ============================================================
     mettreAJourConstantes: function() {
-        console.log('🔄 Mise à jour des constantes...');
+        console.log('🔄 Mise à jour des constantes pour:', this.directionActive);
         
-        // Recharger les configurations
         const troncons = this.chargerDonnees('troncons');
         const societes = this.chargerDonnees('societes');
         const gendarmerie = this.chargerDonnees('gendarmerie');
-        const directions = this.chargerDonnees('directions') || ['DRRS'];
+        const patrouilleurs = this.chargerDonnees('patrouilleurs');
+        const protectionCivile = this.chargerDonnees('protectionCivile');
+        const fourgonMortelle = this.chargerDonnees('fourgonMortelle');
         
-        // Mettre à jour TRONCONS global
+        // TRONCONS
         window.TRONCONS = {};
         troncons.forEach(t => {
             window.TRONCONS[t.id] = {
@@ -3592,11 +4588,11 @@ const Parametres = {
                 max: parseInt(t.pk_max),
                 label: `PK ${t.pk_min} - PK ${t.pk_max}`,
                 axe: t.axe,
-                direction: t.direction
+                direction: this.directionActive
             };
         });
         
-        // Mettre à jour SOCIETES_DEPANNAGE global
+        // SOCIETES
         window.SOCIETES_DEPANNAGE = {};
         societes.forEach(s => {
             const key = s.nom + '_' + (s.axe || '') + '_' + (s.date_entree || '');
@@ -3604,188 +4600,312 @@ const Parametres = {
                 min: parseInt(s.pk_min),
                 max: parseInt(s.pk_max),
                 axe: s.axe,
-                direction: s.direction,
+                direction: this.directionActive,
                 nom: s.nom,
                 date_entree: s.date_entree,
                 date_sortie: s.date_sortie
             };
         });
         
-        // Mettre à jour GENDARMERIE global
+        // GENDARMERIE
         window.GENDARMERIE = gendarmerie.map(g => ({
             nom: g.nom,
-            direction: g.direction,
+            direction: this.directionActive,
             axe: g.axe,
             min: parseInt(g.pk_min),
             max: parseInt(g.pk_max)
         }));
+        // PATROUILLEURS
+        window.PATROUILLEURS = patrouilleurs.map(p => ({
+            nom: p.id,
+            direction: this.directionActive,
+            axe: p.axe,
+            min: parseInt(p.pk_min),
+            max: parseInt(p.pk_max)
+        }));
         
-        // Mettre à jour DIRECTIONS global
-        window.DIRECTIONS = directions;
+        // PROTECTION CIVILE
+        window.PROTECTION_CIVILE = protectionCivile.map(p => ({
+            nom: p.id,
+            direction: this.directionActive,
+            axe: p.axe,
+            min: parseInt(p.pk_min),
+            max: parseInt(p.pk_max)
+        }));
         
-        console.log('✅ Constantes mises à jour!');
-        console.log('📊 Directions:', directions);
-        console.log('📊 Tronçons:', Object.keys(window.TRONCONS));
+        // FOURGON MORTELLE
+        window.FOURGON_MORTELLE = fourgonMortelle.map(p => ({
+            nom: p.id,
+            direction: this.directionActive,
+            axe: p.axe,
+            min: parseInt(p.pk_min),
+            max: parseInt(p.pk_max)
+        }));
         
-        // Rafraîchir les données si elles existent
+        console.log('✅ Constantes mises à jour pour:', this.directionActive);
+        
+        // Ré-enrichir les données
         if (toutesLesDonnees && toutesLesDonnees.length > 0) {
+            console.log('🔄 Ré-enrichissement des données...');
             toutesLesDonnees = enrichirDonnees(toutesLesDonnees);
             sauvegarderDonnees(toutesLesDonnees);
-            
-            // Mettre à jour tous les affichages
-            if (typeof Analyse !== 'undefined' && Analyse.appliquerFiltres) Analyse.appliquerFiltres();
-            if (typeof Intervenants !== 'undefined' && Intervenants.appliquerFiltres) Intervenants.appliquerFiltres();
-            if (typeof Depanneurs !== 'undefined' && Depanneurs.appliquerFiltres) Depanneurs.appliquerFiltres();
-            if (typeof Graphiques !== 'undefined' && Graphiques.appliquerFiltres) Graphiques.appliquerFiltres();
+            console.log('✅ Données ré-enrichies');
         }
     },
     
-    // ====== 14. INITIALISATION ======
-    // ====== 14. INITIALISATION ======
+    // ============================================================
+    // GITHUB API - TOKEN
+    // ============================================================
+    sauvegarderToken: function() {
+        const token = document.getElementById('githubToken').value.trim();
+        
+        if (!token) {
+            alert('❌ Veuillez entrer un token');
+            return;
+        }
+        
+        if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+            alert('❌ Format de token invalide\n\nLe token doit commencer par "ghp_" ou "github_pat_"');
+            return;
+        }
+        
+        try {
+            localStorage.setItem('github_token', token);
+            document.getElementById('githubToken').value = '';
+            this.mettreAJourGithubStatus();
+            alert('✅ Token enregistré avec succès!');
+        } catch(e) {
+            alert('❌ Erreur: ' + e.message);
+        }
+    },
+    
+    supprimerToken: function() {
+        if (!confirm('⚠️ Supprimer le token GitHub ?')) return;
+        localStorage.removeItem('github_token');
+        this.mettreAJourGithubStatus();
+        alert('✅ Token supprimé');
+    },
+    
+    mettreAJourGithubStatus: function() {
+        const token = localStorage.getItem('github_token');
+        const statusDiv = document.getElementById('githubStatus');
+        if (!statusDiv) return;
+        
+        if (token) {
+            const derniereSauvegarde = localStorage.getItem('github_last_save') || 'Jamais';
+            statusDiv.innerHTML = `✅ Connecté à GitHub<br>📅 Dernière sauvegarde : ${derniereSauvegarde}`;
+            statusDiv.style.background = '#e8f5e9';
+            statusDiv.style.color = '#2e7d32';
+        } else {
+            statusDiv.innerHTML = '⚪ Non connecté à GitHub (mode manuel uniquement)';
+            statusDiv.style.background = '#f8fafc';
+            statusDiv.style.color = '#6b7a8f';
+        }
+    },
+    
+    // ============================================================
+    // SAUVEGARDER VERS GITHUB
+    // ============================================================
+    sauvegarderVersGitHub: async function() {
+        const token = localStorage.getItem('github_token');
+        
+        if (!token) {
+            alert('❌ Aucun token GitHub configuré\n\nVeuillez d\'abord enregistrer un token.');
+            return;
+        }
+        
+        if (!confirm('☁️ Sauvegarder la configuration vers GitHub ?\n\nLe fichier data/config.json sera mis à jour.')) return;
+        
+        // Construire le contenu
+        const drrs = ['DRRS', 'DRRN', 'DRRC', 'DRRO', 'DRRE'];
+        const config = {};
+        
+        drrs.forEach(drr => {
+           config[drr] = {
+                troncons: JSON.parse(localStorage.getItem('config_' + drr + '_troncons') || '[]'),
+                societes: JSON.parse(localStorage.getItem('config_' + drr + '_societes') || '[]'),
+                gendarmerie: JSON.parse(localStorage.getItem('config_' + drr + '_gendarmerie') || '[]'),
+                patrouilleurs: JSON.parse(localStorage.getItem('config_' + drr + '_patrouilleurs') || '[]'),
+                protectionCivile: JSON.parse(localStorage.getItem('config_' + drr + '_protectionCivile') || '[]'),
+                fourgonMortelle: JSON.parse(localStorage.getItem('config_' + drr + '_fourgonMortelle') || '[]')
+            };
+        });
+        
+        const contenuJSON = JSON.stringify(config, null, 4);
+        const contenuBase64 = btoa(unescape(encodeURIComponent(contenuJSON)));
+        
+        const statusDiv = document.getElementById('githubStatus');
+        statusDiv.innerHTML = '⏳ Sauvegarde en cours...';
+        statusDiv.style.background = '#fff3e0';
+        statusDiv.style.color = '#e65100';
+        
+        try {
+            const owner = 'Nouari-Abdelkabir';
+            const repo = 'Accidentologie';
+            const path = 'data/config.json';
+            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+            
+            // Étape A: Obtenir le SHA
+            const getResponse = await fetch(apiUrl, {
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            let sha = null;
+            if (getResponse.ok) {
+                const data = await getResponse.json();
+                sha = data.sha;
+            } else if (getResponse.status !== 404) {
+                throw new Error(`Impossible de récupérer le fichier (${getResponse.status})`);
+            }
+            
+            // Étape B: Envoyer la mise à jour
+            const body = {
+                message: `⚙️ Mise à jour config (${new Date().toLocaleString('fr-FR')})`,
+                content: contenuBase64,
+                branch: 'main'
+            };
+            
+            if (sha) body.sha = sha;
+            
+            const putResponse = await fetch(apiUrl, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            });
+            
+            if (!putResponse.ok) {
+                const errorData = await putResponse.json();
+                throw new Error(errorData.message || `Erreur ${putResponse.status}`);
+            }
+            
+            const dateStr = new Date().toLocaleString('fr-FR');
+            localStorage.setItem('github_last_save', dateStr);
+            
+            statusDiv.innerHTML = `✅ Sauvegardé sur GitHub à ${dateStr}`;
+            statusDiv.style.background = '#e8f5e9';
+            statusDiv.style.color = '#2e7d32';
+            
+            alert('✅ Configuration sauvegardée sur GitHub!\n\n' +
+                  '📁 Fichier: data/config.json\n' +
+                  '📅 Date: ' + dateStr + '\n\n' +
+                  '💡 Les modifications seront visibles dans ~1 minute.');
+            
+        } catch(e) {
+            console.error('❌ Erreur:', e);
+            statusDiv.innerHTML = `❌ Erreur : ${e.message}`;
+            statusDiv.style.background = '#ffebee';
+            statusDiv.style.color = '#c62828';
+            alert('❌ Erreur lors de la sauvegarde :\n\n' + e.message);
+        }
+    },
+    
+    // ============================================================
+    // EXPORTER MANUELLEMENT
+    // ============================================================
+    exporterConfigJSON: function() {
+        const drrs = ['DRRS', 'DRRN', 'DRRC', 'DRRO', 'DRRE'];
+        const config = {};
+        
+        drrs.forEach(drr => {
+            config[drr] = {
+                troncons: JSON.parse(localStorage.getItem('config_' + drr + '_troncons') || '[]'),
+                societes: JSON.parse(localStorage.getItem('config_' + drr + '_societes') || '[]'),
+                gendarmerie: JSON.parse(localStorage.getItem('config_' + drr + '_gendarmerie') || '[]'),
+                patrouilleurs: JSON.parse(localStorage.getItem('config_' + drr + '_patrouilleurs') || '[]'),
+                protectionCivile: JSON.parse(localStorage.getItem('config_' + drr + '_protectionCivile') || '[]'),
+                fourgonMortelle: JSON.parse(localStorage.getItem('config_' + drr + '_fourgonMortelle') || '[]')
+            };
+        });
+        
+        const contenuJSON = JSON.stringify(config, null, 4);
+        const blob = new Blob([contenuJSON], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'config.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        alert('✅ Fichier config.json exporté!\n\n📁 Instructions :\n1. Ouvrez GitHub\n2. Allez sur data/config.json\n3. Cliquez sur Edit\n4. Collez le contenu du fichier téléchargé\n5. Commit changes');
+    },
+    
+    // ============================================================
+    // INITIALISATION
+    // ============================================================
     init: async function() {
         console.log('⚙️ Initialisation des paramètres...');
         
-        // ✅ Charger depuis GitHub UNIQUEMENT si localStorage est vide
+        // Restaurer le dernier DRR actif
+        try {
+            const drrSauvegarde = localStorage.getItem('drr_actif');
+            if (drrSauvegarde && this.directions.includes(drrSauvegarde)) {
+                this.directionActive = drrSauvegarde;
+                window.directionActiveCourante = drrSauvegarde;
+                console.log('✅ DRR restauré:', drrSauvegarde);
+            }
+        } catch(e) {}
+        
+        // Charger depuis GitHub si nécessaire
         await initialiserConfiguration();
         
-        // Créer les données par défaut si elles n'existent toujours pas
-        const types = ['troncons', 'societes', 'gendarmerie', 'directions'];
-        types.forEach(type => {
-            const key = 'config_' + type;
-            if (!localStorage.getItem(key)) {
-                const defaultData = this.getDefaultData()[type] || [];
-                this.sauvegarderDonnees(type, defaultData);
-            }
+        // Créer les données par défaut si nécessaire (par DRR)
+        this.directions.forEach(drr => {
+            const types = ['troncons', 'societes', 'gendarmerie', 'patrouilleurs', 'protectionCivile', 'fourgonMortelle'];
+            types.forEach(type => {
+                const key = 'config_' + drr + '_' + type;
+                if (!localStorage.getItem(key)) {
+                    const defaultData = this.getDefaultDataForDRR(drr)[type] || [];
+                    localStorage.setItem(key, JSON.stringify(defaultData));
+                }
+            });
         });
         
-        // Afficher les données
-        this.afficherDirections();
+        // Afficher les tableaux
         this.afficherTroncons();
         this.afficherSocietes();
         this.afficherGendarmerie();
+        this.afficherPatrouilleurs();
+        this.afficherProtectionCivile();
+        this.afficherFourgonMortelle();
         
         // Mettre à jour les constantes
         this.mettreAJourConstantes();
         
-        console.log('✅ Paramètres initialisés');
-    },
-        // ====== ✅ أضف هذه الدالة هنا ======
-    gererClicDirection: function(direction) {
-        console.log('📍 Clic sur Direction:', direction);
-        
-        // 1. التحقق من وجود إعدادات للجهة
-        const troncons = this.chargerDonnees('troncons');
-        const hasData = troncons.some(t => t.direction === direction);
-        
-        // 2. إذا كانت الجهة الحالية (DRRS)
-        if (direction === 'DRRS') {
-            alert(`✅ Vous êtes déjà sur la Direction "${direction}".\n📊 ${toutesLesDonnees.length} accidents chargés.\n\n⚙️ Pour modifier les paramètres, allez dans l'onglet "Paramètres".`);
-            changerPage('analyse');
-            return;
-        }
-        
-        // 3. إذا كانت الجهة جديدة (DRRC, DRRN, DRRO)
-        if (!hasData) {
-            const reponse = confirm(`⚠️ La Direction "${direction}" n'a pas encore de configuration.\n\nVoulez-vous créer une nouvelle configuration pour "${direction}" ?`);
-            if (!reponse) return;
-            
-            // ✅ Créer une configuration vierge pour cette direction
-            this.creerConfigurationVierge(direction);
-            
-            // ✅ Aller à la page Paramètres avec la nouvelle direction sélectionnée
-            sessionStorage.setItem('edit_direction', direction);
-            changerPage('parametres');
-            
-            alert(`✅ Configuration vierge créée pour "${direction}".\n\nVous pouvez maintenant ajouter des Tronçons, Sociétés et PMA.`);
-            return;
-        }
-        
-        // 4. Si la direction existe mais n'est pas chargée
-        if (!toutesLesDonnees || toutesLesDonnees.length === 0) {
-            alert('📭 Veuillez d\'abord charger un fichier Excel.');
-            return;
-        }
-        
-        // 5. Demander de charger un fichier pour cette direction
-        const currentDirection = toutesLesDonnees[0]?.['_direction'] || 'DRRS';
-        const message = `📁 Direction actuelle: ${currentDirection}\n\n🔀 Vous voulez passer à la Direction "${direction}".\n\nVeuillez sélectionner le fichier Excel correspondant.`;
-        
-        if (!confirm(message)) return;
-        
-        // Ouvrir le sélecteur de fichiers
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.xlsx,.xls';
-        input.multiple = false;
-        
-        input.onchange = function(e) {
-            const fichier = e.target.files[0];
-            if (!fichier) return;
-            chargerFichierPourDirection(fichier, direction);
-        };
-        
-        input.click();
-    },
-
-
-    // ====== ✅ أضف هذه الدالة هنا ======
-    creerConfigurationVierge: function(direction) {
-        console.log(`🆕 Création d'une configuration vierge pour ${direction}`);
-        
-        // 1. Créer des tronçons vides pour cette direction
-        const troncons = this.chargerDonnees('troncons');
-        const nouveauxTroncons = [
-            { id: 'T1', direction: direction, axe: 'A3', pk_min: 0, pk_max: 0 },
-            { id: 'T2', direction: direction, axe: 'A3', pk_min: 0, pk_max: 0 },
-            { id: 'T3', direction: direction, axe: 'A3', pk_min: 0, pk_max: 0 },
-            { id: 'T4', direction: direction, axe: 'A3', pk_min: 0, pk_max: 0 }
-        ];
-        
-        // Ajouter seulement si la direction n'existe pas déjà
-        nouveauxTroncons.forEach(t => {
-            const existe = troncons.some(item => item.id === t.id && item.direction === direction);
-            if (!existe) {
-                troncons.push(t);
+        // Mettre à jour l'onglet actif
+        document.querySelectorAll('.drr-tab').forEach(btn => {
+            if (btn.dataset.drr === this.directionActive) {
+                btn.classList.add('active');
+                btn.style.background = '#2d7db8';
+                btn.style.color = 'white';
+                btn.style.border = '2px solid #2d7db8';
+            } else {
+                btn.classList.remove('active');
+                btn.style.background = 'white';
+                btn.style.color = '#1a3a5c';
+                btn.style.border = '2px solid #d0d8e0';
             }
         });
-        this.sauvegarderDonnees('troncons', troncons);
         
-        // 2. Créer des sociétés vides pour cette direction
-        const societes = this.chargerDonnees('societes');
-        const nouvellesSocietes = [
-            { nom: 'Société 1', direction: direction, axe: 'A3', pk_min: 0, pk_max: 0 },
-            { nom: 'Société 2', direction: direction, axe: 'A3', pk_min: 0, pk_max: 0 },
-            { nom: 'Société 3', direction: direction, axe: 'A3', pk_min: 0, pk_max: 0 }
-        ];
+        const drrNom = document.getElementById('drrActifNom');
+        if (drrNom) drrNom.textContent = this.directionActive;
+        // ✅ Mettre à jour le nom dans la sidebar
+        const sidebarDrr = document.getElementById('sidebarDrrName');
+        if (sidebarDrr) sidebarDrr.textContent = this.directionActive;
+        // Restaurer l'état de la section Export Config
+        this.restaurerEtatExportConfig();
         
-        nouvellesSocietes.forEach(s => {
-            const existe = societes.some(item => item.nom === s.nom && item.direction === direction);
-            if (!existe) {
-                societes.push(s);
-            }
-        });
-        this.sauvegarderDonnees('societes', societes);
-        
-        // 3. Créer des PMA vides pour cette direction
-        const gendarmerie = this.chargerDonnees('gendarmerie');
-        const nouvellesPMA = [
-            { nom: 'PMA 1', direction: direction, axe: 'A3', pk_min: 0, pk_max: 0 },
-            { nom: 'PMA 2', direction: direction, axe: 'A3', pk_min: 0, pk_max: 0 }
-        ];
-        
-        nouvellesPMA.forEach(p => {
-            const existe = gendarmerie.some(item => item.nom === p.nom && item.direction === direction);
-            if (!existe) {
-                gendarmerie.push(p);
-            }
-        });
-        this.sauvegarderDonnees('gendarmerie', gendarmerie);
-        
-        console.log(`✅ Configuration vierge créée pour ${direction}`);
-    },
-    
+        console.log('✅ Paramètres initialisés pour:', this.directionActive);
+    }
 };
-
 
 // ============================================================
 // 11. REINITIALISATION GLOBALE
@@ -3831,15 +4951,18 @@ function changerPage(page) {
     // إظهار/إخفاء الفلاتر الخاصة
     const interventionGroup = document.getElementById('interventionFilterGroup');
     const depGroup = document.getElementById('depanneurFilterGroup');
-    const pmaGroup = document.getElementById('pmaFilterGroup');
+    const entiteGroup = document.getElementById('entiteFilterGroup');
     
     if (interventionGroup) interventionGroup.style.display = 'none';
     if (depGroup) depGroup.style.display = 'none';
-    if (pmaGroup) pmaGroup.style.display = 'none';
+    if (entiteGroup) entiteGroup.style.display = 'none';
     
     if (page === 'intervenants') {
         if (interventionGroup) interventionGroup.style.display = 'flex';
-        if (pmaGroup) pmaGroup.style.display = 'flex';
+        // Afficher le filtre entité seulement si le Type le justifie
+        if (typeof Intervenants !== 'undefined' && Intervenants.gererAffichageEntite) {
+            Intervenants.gererAffichageEntite();
+        }
     } else if (page === 'depanneurs') {
         if (depGroup) depGroup.style.display = 'flex';
     }
@@ -3852,9 +4975,9 @@ function changerPage(page) {
         } else if (page === 'depanneurs') {
             Depanneurs.appliquerFiltres();
         } else if (page === 'graphiques') {
-            // ✅ استخدم appliquerFiltres بدلاً من mettreAJour
-            if (typeof Graphiques !== 'undefined' && Graphiques.appliquerFiltres) {
-                Graphiques.appliquerFiltres();
+            if (typeof Graphiques !== 'undefined') {
+                if (Graphiques.mettreAJourFiltres) Graphiques.mettreAJourFiltres();
+                if (Graphiques.appliquerFiltres) Graphiques.appliquerFiltres();
             }
         }
     }, 100);
@@ -3866,7 +4989,16 @@ function changerPage(page) {
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('📄 DOM chargé');
-    
+    // ====== Initialiser le label de l'année ======
+    mettreAJourAnneeLabel();
+
+    // ====== Écouter le changement d'année ======
+    const selectAnnee = document.getElementById('chargementAnneeFilter');
+    if (selectAnnee) {
+        selectAnnee.addEventListener('change', function() {
+            mettreAJourAnneeLabel();
+        });
+    }
     // ====== ربط فلاتر Analyse ======
     const analyseTroncon = document.getElementById('analyseTronconFilter');
     const analyseMois = document.getElementById('analyseMoisFilter');
@@ -3883,8 +5015,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const intervTroncon = document.getElementById('intervTronconFilter');
     const intervMois = document.getElementById('intervMoisFilter');
     const intervType = document.getElementById('intervTypeFilter');
-    const intervPma = document.getElementById('intervPmaFilter');
-    
+    const intervEntite = document.getElementById('intervEntiteFilter');
+
      if (intervTroncon) intervTroncon.addEventListener('change', function() { 
         Intervenants.mettreAJourFiltres();
         Intervenants.appliquerFiltres(); 
@@ -3894,8 +5026,8 @@ document.addEventListener('DOMContentLoaded', function() {
         Intervenants.appliquerFiltres(); 
     });
     if (intervType) intervType.addEventListener('change', function() { Intervenants.appliquerFiltres(); });
-    if (intervPma) intervPma.addEventListener('change', function() { Intervenants.appliquerFiltres(); });
-    
+    if (intervEntite) intervEntite.addEventListener('change', function() { Intervenants.appliquerFiltres(); });
+
     // ====== ربط فلاتر Dépanneurs ======
     const depTroncon = document.getElementById('depTronconFilter');
     const depMois = document.getElementById('depMoisFilter');
@@ -3929,12 +5061,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (graphCause) graphCause.addEventListener('change', function() { Graphiques.appliquerFiltres(); });
     
     // ====== ✅ ربط فلاتر Rapprochement ======
+    // ====== ربط فلاتر Rapprochement ======
     const rappTroncon = document.getElementById('rappTronconFilter');
     const rappMois = document.getElementById('rappMoisFilter');
+    const rappAnnee = document.getElementById('rappAnneeFilter');
 
     if (rappTroncon) rappTroncon.addEventListener('change', function() { Rapprochement.appliquerFiltres(); });
     if (rappMois) rappMois.addEventListener('change', function() { Rapprochement.appliquerFiltres(); });
-    
+    if (rappAnnee) rappAnnee.addEventListener('change', function() {
+        mettreAJourAnneeLabel();
+        Rapprochement.mettreAJourFiltres();
+        Rapprochement.appliquerFiltres();
+    });
     // ====== استعادة البيانات ======
     (async function() {
     const donneesRestorees = await restaurerDonnees();
@@ -4291,31 +5429,29 @@ const Rapprochement = {
     },
     
     // ====== METTRE À JOUR LES FILTRES ======
+  // ====== METTRE À JOUR LES FILTRES ======
     mettreAJourFiltres: function() {
-        const selectTroncon = document.getElementById('depTronconFilter');
-        const selectMois = document.getElementById('depMoisFilter');
-        const selectSociete = document.getElementById('depSocieteFilter');
+        // ✅ Mettre à jour le label de l'année
+        if (typeof mettreAJourAnneeLabel === 'function') {
+            mettreAJourAnneeLabel();
+        }
         
-        if (!selectTroncon || !selectMois || !selectSociete) return;
+        // ✅ BONS IDs : rapp* (pas dep*)
+        const selectTroncon = document.getElementById('rappTronconFilter');
+        const selectMois = document.getElementById('rappMoisFilter');
         
-        // ---- حفظ التحديدات الحالية ----
+        if (!selectTroncon || !selectMois) return;
+        
+        // ---- Sauvegarder les sélections actuelles ----
         const selectedTroncon = Array.from(selectTroncon.selectedOptions).map(opt => opt.value);
         const selectedMois = Array.from(selectMois.selectedOptions).map(opt => opt.value);
-        const selectedSociete = Array.from(selectSociete.selectedOptions).map(opt => opt.value);
         
-        // ---- بناء قائمة المقاطع (مع T2_2) ----
-        const troncons = new Set();
-        toutesLesDonnees.forEach(d => {
-            if (d['_troncon'] && d['_troncon'] !== 'Inconnu') {
-                troncons.add(d['_troncon']);
-            }
-        });
-        
+        // ---- Tronçons dynamiques ----
         selectTroncon.innerHTML = '<option value="all">Tous les tronçons</option>';
-        ['T1', 'T2', 'T2_2', 'T3', 'T4'].forEach(t => {
+        getTronconsActifs().forEach(t => {
             const opt = document.createElement('option');
             opt.value = t;
-            opt.textContent = t + ' (' + getPkRange(t) + ')';
+            opt.textContent = t + ' (' + getPkRangeDynamique(t) + ')';
             selectTroncon.appendChild(opt);
         });
         
@@ -4326,12 +5462,13 @@ const Rapprochement = {
             selectTroncon.querySelector('option[value="all"]').selected = true;
         }
         
-        // ---- بناء قائمة الأشهر ----
+        // ---- Mois (union source + comparaison) ----
         const moisExistants = new Set();
-        toutesLesDonnees.forEach(d => {
-            if (d['_mois'] && d['_mois'] >= 1 && d['_mois'] <= 12) {
-                moisExistants.add(d['_mois']);
-            }
+        (this.donneesSource || []).forEach(d => {
+            if (d['_mois'] && d['_mois'] >= 1 && d['_mois'] <= 12) moisExistants.add(d['_mois']);
+        });
+        (this.donneesCompare || []).forEach(d => {
+            if (d['_mois'] && d['_mois'] >= 1 && d['_mois'] <= 12) moisExistants.add(d['_mois']);
         });
         
         selectMois.innerHTML = '<option value="all">Tous les mois</option>';
@@ -4351,51 +5488,7 @@ const Rapprochement = {
             selectMois.querySelector('option[value="all"]').selected = true;
         }
         
-        // ====== ✅ بناء قائمة الشركات (dynamique depuis localStorage) ======
-        const societes = new Set();
-        
-        // ✅ Option 1: Récupérer depuis les données chargées
-        toutesLesDonnees.forEach(d => {
-            if (d['_societe'] && d['_societe'] !== 'Inconnue' && d['_societe'] !== 'Inconnue') {
-                societes.add(d['_societe']);
-            }
-        });
-        
-        // ✅ Option 2: Récupérer depuis localStorage (config_societes)
-        try {
-            const configData = localStorage.getItem('config_societes');
-            if (configData) {
-                const configSocietes = JSON.parse(configData);
-                configSocietes.forEach(s => {
-                    if (s.nom) societes.add(s.nom);
-                });
-            }
-        } catch(e) {}
-        
-        // ✅ Option 3: Récupérer depuis SOCIETES_DEPANNAGE global
-        Object.keys(SOCIETES_DEPANNAGE).forEach(s => {
-            societes.add(s);
-        });
-        
-        // ✅ Trier les sociétés alphabétiquement
-        const societesTriees = Array.from(societes).sort();
-        
-        selectSociete.innerHTML = '<option value="all">Toutes les sociétés</option>';
-        societesTriees.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s;
-            opt.textContent = s;
-            selectSociete.appendChild(opt);
-        });
-        
-        console.log('📊 Sociétés disponibles:', societesTriees);
-        
-        Array.from(selectSociete.options).forEach(opt => {
-            if (selectedSociete.includes(opt.value)) opt.selected = true;
-        });
-        if (selectSociete.selectedOptions.length === 0) {
-            selectSociete.querySelector('option[value="all"]').selected = true;
-        }
+        console.log('📊 [Rapprochement] Filtres mis à jour');
     },
     
     // ====== APPLIQUER LES FILTRES ======
@@ -4426,11 +5519,17 @@ const Rapprochement = {
         this.mettreAJourTableaux();
     },
     
-    // ====== METTRE À JOUR LES TABLEAUX ======
+     // ====== METTRE À JOUR LES TABLEAUX ======
     mettreAJourTableaux: function() {
         this.afficherTableau('rappSourceTable', this.donneesFiltreesSource, 'Source');
         this.afficherTableau('rappCompareTable', this.donneesFiltreesCompare, 'Comparaison');
         this.afficherDifferences();
+        
+        // ✅ Si le panneau des détails est ouvert, le rafraîchir aussi
+        const detailsContainer = document.getElementById('rappDetailsContainer');
+        if (detailsContainer && detailsContainer.style.display !== 'none') {
+            this.afficherDetailsDifferences();
+        }
     },
     
     // ====== AFFICHER UN TABLEAU ======
@@ -4443,7 +5542,7 @@ const Rapprochement = {
             return;
         }
         
-        const tousLesTroncons = ['T1', 'T2', 'T2_2', 'T3', 'T4'];
+        const tousLesTroncons = getTronconsActifs();
         const resultats = {};
         tousLesTroncons.forEach(t => {
             resultats[t] = { corporelle: 0, materielle: 0, mortelle: 0, total: 0, tues: 0, bg: 0, bl: 0 };
@@ -4490,7 +5589,7 @@ const Rapprochement = {
         }
         
         // Calculer les différences
-        const tousLesTroncons = ['T1', 'T2', 'T2_2', 'T3', 'T4'];
+        const tousLesTroncons = getTronconsActifs();
         const diff = {};
         tousLesTroncons.forEach(t => {
             diff[t] = { corporelle: 0, materielle: 0, mortelle: 0, total: 0, tues: 0, bg: 0, bl: 0 };
@@ -4532,17 +5631,32 @@ const Rapprochement = {
         
         html += `<tr class="total-row"><td colspan="2"><strong>Total</strong></td><td><strong>${totalCorp > 0 ? '+' : ''}${totalCorp}</strong></td><td><strong>${totalMat > 0 ? '+' : ''}${totalMat}</strong></td><td><strong>${totalMort > 0 ? '+' : ''}${totalMort}</strong></td><td><strong>${totalAcc > 0 ? '+' : ''}${totalAcc}</strong></td><td><strong>${totalTues > 0 ? '+' : ''}${totalTues}</strong></td><td><strong>${totalBG > 0 ? '+' : ''}${totalBG}</strong></td><td><strong>${totalBL > 0 ? '+' : ''}${totalBL}</strong></td></tr></tbody></table>`;
         
-        container.innerHTML = html;
+      // ✅ Résumé en haut du tableau
+        const nbSource = this.donneesFiltreesSource.length;
+        const nbCompare = this.donneesFiltreesCompare.length;
+        const diffLignes = nbCompare - nbSource;
+        const diffLignesStr = (diffLignes >= 0 ? '+' : '') + diffLignes;
+        
+        const resume = `<div style="padding:12px 16px;background:#f0f8ff;border-radius:10px;margin-bottom:15px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;">
+            <span><strong>📊 Lignes source :</strong> ${nbSource}</span>
+            <span><strong>📊 Lignes comparaison :</strong> ${nbCompare}</span>
+            <span><strong>📌 Différence :</strong> <span style="color:${diffLignes !== 0 ? '#e74c3c' : '#27ae60'};font-weight:700;">${diffLignesStr}</span></span>
+        </div>`;
+        
+        container.innerHTML = resume + html;
     },
     
     // ====== CALCULER LES RÉSULTATS ======
     calculerResultats: function(donnees) {
-        const tousLesTroncons = ['T1', 'T2', 'T2_2', 'T3', 'T4'];
+        const tousLesTroncons = getTronconsActifs();
         const resultats = {};
+        
+        // 1. Initialiser tous les tronçons actifs à zéro
         tousLesTroncons.forEach(t => {
             resultats[t] = { corporelle: 0, materielle: 0, mortelle: 0, total: 0, tues: 0, bg: 0, bl: 0 };
         });
         
+        // 2. Compter les accidents
         donnees.forEach(d => {
             const t = d['_troncon'];
             if (t && t in resultats) {
@@ -4552,8 +5666,8 @@ const Rapprochement = {
                 else if (gravite === 'Matérielle') resultats[t].materielle++;
                 else if (gravite === 'Mortelle') resultats[t].mortelle++;
                 resultats[t].tues += parseInt(d['_total_tues'] || 0);
-                resultats[t].bg += parseInt(d['_total_bg'] || 0);
-                resultats[t].bl += parseInt(d['_total_bl'] || 0);
+                resultats[t].bg   += parseInt(d['_total_bg']   || 0);
+                resultats[t].bl   += parseInt(d['_total_bl']   || 0);
             }
         });
         
@@ -6426,3 +7540,4 @@ const Exporter = {
         URL.revokeObjectURL(url);
     }
 };
+

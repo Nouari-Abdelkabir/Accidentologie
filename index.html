@@ -22,7 +22,7 @@
         <div class="sidebar-header">
             <img src="image/adm.jpg" alt="DRRS" 
                 style="width:180px; height:70px; object-fit:cover; margin-bottom:8px; border:2px solid rgba(255,255,255,0.2); border-radius:8px;"> 
-                <h2 style="font-size:20px; margin:0;">DRRS</h2>
+            <h2 id="sidebarDrrName" style="font-size:20px; margin:0;">DRRS</h2>
             <p style="font-size:12px; opacity:0.7; margin:2px 0 0;">Analyse des Accidents</p>
         </div>
         
@@ -182,7 +182,7 @@
         PAGE: ANALYSE
         ============================================================ -->
         <section id="page-analyse" class="page">
-            <h2>📊 Tableau d'Analyse des Accidents par Tronçon</h2>
+            <h2>📊 Tableau d'Analyse des Accidents par Tronçon <span id="analyseAnneeLabel" style="color:#2d7db8; font-size:0.85em; font-weight:600;"></span></h2>
             
             <!-- ====== FILTRES ====== -->
             <div class="filter-area" style="margin-bottom:20px;">
@@ -206,7 +206,7 @@
             <div class="table-container" id="analyseTable">
                 <p style="text-align:center;color:#999;padding:40px;">Chargez des fichiers Excel pour afficher l'analyse</p>
             </div>
-                            <!-- ====== GRAPHIQUE PK (en dessous, pleine largeur) ====== -->
+                <!-- ====== GRAPHIQUE PK (rempli dynamiquement) ====== -->
                 <div class="chart-card" style="margin-top:20px;">
                     <h4>📍 Répartition des Accidents par PK</h4>
                     
@@ -229,91 +229,15 @@
                         </button>
                     </div>
                     
-                    <!-- Le graphique PK -->
-                    <div id="pkChartContainer" style="position:relative; width:100%; height:420px; background:#f8fafc; border-radius:10px; border:1px solid #e8ecf2; overflow:hidden; cursor:crosshair;">
-                        
-                        <!-- ============================================================
-                        SECTION A3 (2 barres)
-                        ============================================================ -->
-                        
-                        <!-- Labels PK pour A3 -->
-                        <!-- Le graphique PK -->
-                        <div id="pkChartContainer" style="position:relative; width:100%; height:450px; background:#f8fafc; border-radius:10px; border:1px solid #e8ecf2; overflow:hidden; cursor:crosshair;">
-                            
-                            <!-- ============================================================
-                            SECTION A3 (2 barres)
-                            ============================================================ -->
-                            
-                            <!-- Labels PK pour A3 -->
-                            <div style="position:absolute; top:5px; left:40px; right:40px; height:16px; font-size:10px; color:#0861df;">
-                                <span style="position:absolute; left:0%; transform:translateX(-50%);">PK 27+000</span>
-                                <span style="position:absolute; left:19.6%; transform:translateX(-50%);">PK 106+000</span>
-                                <span style="position:absolute; left:42.5%; transform:translateX(-50%);">PK 198+000</span>
-                                <span style="position:absolute; left:63.4%; transform:translateX(-50%);">PK 282+000</span>
-                                <span style="position:absolute; left:100%; transform:translateX(-50%);">PK 430+000</span>
-                            </div>
-                            
-                            <!-- BARRE 1: A3 Croissant -->
-                            <div style="position:absolute; top:35px; left:40px; right:40px; height:55px; background:#d0d8e0; border-radius:6px; border:1px solid #b0b8c0; opacity:0.6;"></div>
-                            <div style="position:absolute; top:62px; left:40px; right:40px; height:0; border-top:2px dashed #ffffff; pointer-events:none;"></div>
-                            <div style="position:absolute; top:22px; left:40px; font-size:10px; color:#2d7db8; font-weight:bold;">⬆️ A3 Croissant</div>
-                            <div id="pkPointsCroissant" style="position:absolute; top:35px; left:40px; right:40px; height:75px; z-index:3;"></div>
-                            
-                            <!-- BARRE 2: A3 decroissant -->
-                            <div style="position:absolute; top:105px; left:40px; right:40px; height:55px; background:#d0d8e0; border-radius:6px; border:1px solid #b0b8c0; opacity:0.6;"></div>
-                            <div style="position:absolute; top:132px; left:40px; right:40px; height:0; border-top:2px dashed #ffffff; pointer-events:none;"></div>
-                            <div style="position:absolute; top:92px; left:40px; font-size:10px; color:#2d7db8; font-weight:bold;">⬇️ A3 decroissant</div>
-                            <div id="pkPointsDecroissant" style="position:absolute; top:105px; left:40px; right:40px; height:75px; z-index:3;"></div>
-                            
-                            <!-- ============================================================
-                            SECTION A301 (2 barres)
-                            ============================================================ -->
-                            
-                            <!-- Labels PK pour A301 -->
-                            <div style="position:absolute; top:185px; left:40px; right:40px; display:flex; justify-content:space-between; font-size:10px; color:#27ae60;">
-                                <span>PK 0</span>
-                                <span style="margin-right:40px;">PK 13+000</span>
-                            </div>
-                            
-                            <!-- BARRE 3: A301 Croissant -->
-                            <div style="position:absolute; top:210px; left:40px; right:40px; height:45px; background:#d0d8e0; border-radius:6px; border:1px solid #b0b8c0; opacity:0.6;"></div>
-                            <div style="position:absolute; top:232px; left:40px; right:40px; height:0; border-top:2px dashed #ffffff; pointer-events:none;"></div>
-                            <div style="position:absolute; top:197px; left:40px; font-size:10px; color:#2d7db8; font-weight:bold;">⬆️ A301 Croissant</div>
-                            <div id="pkPointsA301_1" style="position:absolute; top:210px; left:40px; right:40px; height:75px; z-index:3;"></div>
-                            
-                            <!-- BARRE 4: A301 decroissant -->
-                            <div style="position:absolute; top:270px; left:40px; right:40px; height:45px; background:#d0d8e0; border-radius:6px; border:1px solid #b0b8c0; opacity:0.6;"></div>
-                            <div style="position:absolute; top:292px; left:40px; right:40px; height:0; border-top:2px dashed #ffffff; pointer-events:none;"></div>
-                            <div style="position:absolute; top:257px; left:40px; font-size:10px; color:#2d7db8; font-weight:bold;">⬇️ A301 decroissant</div>
-                            <div id="pkPointsA301_2" style="position:absolute; top:270px; left:40px; right:40px; height:75px; z-index:3;"></div>
-                            
-                            <!-- Légende des couleurs -->
-                            <div style="position:absolute; bottom:2px; right:15px; display:flex; gap:10px; font-size:10px; color:#4a5a6a; background:rgba(255,255,255,0.9); padding:2px 8px; border-radius:6px; border:1px solid #e8ecf2;">
-                                <span>🔴 Tués</span>
-                                <span>🟠 BG</span>
-                                <span>🟢 BL</span>
-                            </div>
-                            
-                            <!-- Info-bulle -->
-                            <div id="pkTooltip" style="display:none; position:absolute; background:white; padding:10px 14px; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.15); border:1px solid #d0d8e0; font-size:13px; z-index:100; min-width:180px; pointer-events:none; transition:opacity 0.2s;">
-                                <div id="pkTooltipContent"></div>
-                            </div>
-                        </div>
-
-
-                        
-                        <!-- Info-bulle -->
-                        <div id="pkTooltip" style="display:none; position:absolute; background:white; padding:10px 14px; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.15); border:1px solid #d0d8e0; font-size:13px; z-index:100; min-width:180px; pointer-events:none; transition:opacity 0.2s;">
-                            <div id="pkTooltipContent"></div>
-                        </div>
+                    <!-- Conteneur unique (rempli par JS) -->
+                    <div id="pkChartContainer" style="position:relative; width:100%; height:auto; min-height:420px; background:#f8fafc; border-radius:10px; border:1px solid #e8ecf2; overflow:hidden; cursor:crosshair; padding-bottom:30px;">
+                        <!-- Rempli par Analyse.dessinerPK() -->
                     </div>
                     
                     <!-- Statistiques PK -->
                     <div style="display:flex; justify-content:center; gap:20px; margin-top:15px; flex-wrap:wrap; font-size:12px; color:#4a5a6a;">
-                        <span>⬆️ A3 Croissant: <span id="totalCroissant">0</span></span>
-                        <span>⬇️ A3 decroissant: <span id="totalDecroissant">0</span></span>
-                        <span>⬆️ A301 Croissant: <span id="totalA301Croissant">0</span></span>
-                        <span>⬇️ A301 decroissant: <span id="totalA301Decroissant">0</span></span>
+                        <span>⬆️ Croissant: <span id="totalCroissant">0</span></span>
+                        <span>⬇️ Décroissant: <span id="totalDecroissant">0</span></span>
                         <span>🟢 BL: <span id="totalBLPK">0</span></span>
                         <span>🟠 BG: <span id="totalBGPK">0</span></span>
                         <span>🔴 Tués: <span id="totalTuesPK">0</span></span>
@@ -372,7 +296,7 @@
         ============================================================ -->
         <!-- ====== PAGE: INTERVENANTS ====== -->
         <section id="page-intervenants" class="page">
-            <h2>⏱️ Délais d'Intervention des Intervenants</h2>
+            <h2>⏱️ Délais d'Intervention des Intervenants <span id="intervenantsAnneeLabel" style="color:#2d7db8; font-size:0.85em; font-weight:600;"></span></h2>
             
             <!-- ====== FILTRES ====== -->
             <div class="filter-area" style="margin-bottom:20px;">
@@ -392,13 +316,22 @@
                 
                 <div class="filter-group" id="interventionFilterGroup">
                     <label>🛠️ Type :</label>
-                    <select id="intervTypeFilter" onchange="Intervenants.gererAffichagePMA()">
+                    <select id="intervTypeFilter" onchange="Intervenants.gererAffichageEntite()">
                         <option value="all">📊 Tous</option>
                         <option value="patrouilleur">👮 Patrouilleur</option>
-                        <option value="gr">🚔 GR</option>
-                        <option value="pc">🚑 PC</option>
+                        <option value="gr">🚔 GR (PMA)</option>
+                        <option value="pc">🚑 Protection Civile</option>
+                        <option value="fourgon">🚑 Fourgon Mortelle</option>
                     </select>
                 </div>
+
+<!-- فلتر الكيان (PMA / Patrouilleur / PC / Fourgon — s'affiche selon le Type) -->
+<div class="filter-group" id="entiteFilterGroup" style="display:none;">
+    <label id="entiteFilterLabel">🚔 PMA :</label>
+    <select id="intervEntiteFilter" onchange="Intervenants.appliquerFiltres()">
+        <option value="all">Toutes</option>
+    </select>
+</div>
 
                 <!-- فلتر PMA (مخفي افتراضياً) -->
                 <div class="filter-group" id="pmaFilterGroup" style="display:none;">
@@ -466,7 +399,7 @@
         PAGE: DEPANNEURS
         ============================================================ -->
         <section id="page-depanneurs" class="page">
-            <h2>🚛 Délais d'Intervention des Dépanneurs</h2>
+            <h2>🚛 Délais d'Intervention des Dépanneurs <span id="depanneursAnneeLabel" style="color:#2d7db8; font-size:0.85em; font-weight:600;"></span></h2>
             
             <!-- ====== FILTRES ====== -->
             <div class="filter-area" style="margin-bottom:20px;">
@@ -555,7 +488,7 @@
         PAGE: GRAPHIQUES (DASHBOARD)
         ============================================================ -->
         <section id="page-graphiques" class="page">
-            <h2>📈 Tableau de Bord - Analyse Globale</h2>
+            <h2>📈 Tableau de Bord - Analyse Globale <span id="graphiquesAnneeLabel" style="color:#2d7db8; font-size:0.85em; font-weight:600;"></span></h2>
             
             <!-- ====== FILTRES GÉNÉRAUX ====== -->
             <div class="filter-area" style="margin-bottom:25px;">
@@ -592,6 +525,27 @@
                         <span class="kpi-value" id="kpiMoyenne">0</span>
                     </div>
                 </div>
+                <div class="kpi-card yellow">
+                    <div class="kpi-icon">📍</div>
+                    <div class="kpi-info">
+                        <span class="kpi-label">Tronçon le plus dangereux</span>
+                        <span class="kpi-value" id="kpiTroncon">-</span>
+                    </div>
+                </div>
+                <div class="kpi-card red">
+                    <div class="kpi-icon">🚨</div>
+                    <div class="kpi-info">
+                        <span class="kpi-label">Total Victimes</span>
+                        <span class="kpi-value" id="kpiVictimes">0</span>
+                    </div>
+                </div>
+                <div class="kpi-card purple">
+                    <div class="kpi-info">
+                        <span class="kpi-label">Période analysée</span>
+                        <span class="kpi-value" id="kpiPeriode">-</span>
+                    </div>
+                </div>
+                
                 <div class="kpi-card red">
                     <div class="kpi-icon">🔴</div>
                     <div class="kpi-info">
@@ -613,13 +567,7 @@
                         <span class="kpi-value" id="kpiCause">-</span>
                     </div>
                 </div>
-                <div class="kpi-card yellow">
-                    <div class="kpi-icon">📍</div>
-                    <div class="kpi-info">
-                        <span class="kpi-label">Tronçon le plus dangereux</span>
-                        <span class="kpi-value" id="kpiTroncon">-</span>
-                    </div>
-                </div>
+                
             </div>
             
             <!-- ====== GRAPHIQUES ====== -->
@@ -798,7 +746,7 @@
         PAGE: RAPPROCHEMENT
         ============================================================ -->
         <section id="page-rapprochement" class="page">
-            <h2>🔄 Rapprochement - Comparaison des Données</h2>
+            <h2>🔄 Rapprochement - Comparaison des Données <span id="rapprochementAnneeLabel" style="color:#2d7db8; font-size:0.85em; font-weight:600;"></span></h2>
             
             <!-- ====== FILTRES ====== -->
             <div class="filter-area" style="margin-bottom:20px;">
@@ -1037,25 +985,73 @@
         <!-- ============================================================
         PAGE: PARAMÈTRES
         ============================================================ -->
+        <!-- ============================================================
+PAGE: PARAMÈTRES
+============================================================ -->
         <section id="page-parametres" class="page">
             <h2>⚙️ Paramètres - Configuration des Axes</h2>
             
-            <div class="parametres-container">
+            <!-- ====== ✅ TABS DRR ====== -->
+            <div class="drr-tabs" style="display:flex; gap:10px; margin-bottom:25px; flex-wrap:wrap; padding:15px; background:#f0f8ff; border-radius:10px; border:2px solid #d0e8f0;">
+                <button class="drr-tab active" data-drr="DRRS" onclick="Parametres.changerDRR('DRRS')" 
+                        style="padding:10px 25px; border-radius:8px; border:2px solid #2d7db8; background:#2d7db8; color:white; font-weight:700; font-size:15px; cursor:pointer; transition:all 0.3s;">
+                    🏢 DRRS
+                </button>
+                <button class="drr-tab" data-drr="DRRN" onclick="Parametres.changerDRR('DRRN')" 
+                        style="padding:10px 25px; border-radius:8px; border:2px solid #d0d8e0; background:white; color:#1a3a5c; font-weight:700; font-size:15px; cursor:pointer; transition:all 0.3s;">
+                    🏢 DRRN
+                </button>
+                <button class="drr-tab" data-drr="DRRC" onclick="Parametres.changerDRR('DRRC')" 
+                        style="padding:10px 25px; border-radius:8px; border:2px solid #d0d8e0; background:white; color:#1a3a5c; font-weight:700; font-size:15px; cursor:pointer; transition:all 0.3s;">
+                    🏢 DRRC
+                </button>
+                <button class="drr-tab" data-drr="DRRO" onclick="Parametres.changerDRR('DRRO')" 
+                        style="padding:10px 25px; border-radius:8px; border:2px solid #d0d8e0; background:white; color:#1a3a5c; font-weight:700; font-size:15px; cursor:pointer; transition:all 0.3s;">
+                    🏢 DRRO
+                </button>
+                <button class="drr-tab" data-drr="DRRE" onclick="Parametres.changerDRR('DRRE')" 
+                        style="padding:10px 25px; border-radius:8px; border:2px solid #d0d8e0; background:white; color:#1a3a5c; font-weight:700; font-size:15px; cursor:pointer; transition:all 0.3s;">
+                    🏢 DRRE
+                </button>
+            </div>
+            
+            <!-- ====== ✅ Indicateur DRR actif ====== -->
+            <div id="drrActifInfo" style="padding:12px 20px; background:#e8f5e9; border-radius:8px; border:1px solid #a5d6a7; margin-bottom:20px;">
+                <strong style="color:#2e7d32;">📍 Direction active :</strong>
+                <span id="drrActifNom" style="font-weight:700; color:#2e7d32; font-size:16px;">DRRS</span>
+            </div>
+            
+            <!-- ====== 📤 CONFIGURATION (ADMIN) ====== -->
+            <div style="margin-bottom:20px; background:#fff3e0; border-radius:10px; border:2px solid #ffb74d; overflow:hidden;">
+                <h3 onclick="Parametres.basculerExportConfig()" 
+                    style="margin:0; padding:14px 18px; color:#e65100; cursor:pointer; user-select:none; display:flex; justify-content:space-between; align-items:center; background:#ffe8cc; border-bottom:1px solid #ffb74d;">
+                    <span>⚙️ Configuration (Admin)</span>
+                    <span id="exportConfigToggleIcon" style="background:#e65100; color:white; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; border-radius:50%; font-size:12px; font-weight:bold;">▼</span>
+                </h3>
                 
-                <!-- ====== 1. DIRECTIONS ====== -->
-                <div class="param-card">
-                    <h3>📍 Directions</h3>
-                    <div class="param-actions">
-                        <button class="btn-add" onclick="Parametres.ajouterDirection()">➕ Ajouter une Direction</button>
-                    </div>
-                    <div id="directionsList" style="display:flex; flex-wrap:wrap; gap:10px; padding:10px;">
-                        <!-- Rempli par JavaScript -->
-                    </div>
+                <div id="exportConfigBody" style="padding:18px;">
+                    <p style="margin:0 0 12px 0; color:#4a5a6a; font-size:13px; line-height:1.6;">
+                        📌 Exportez la configuration complète des <strong>5 DRRs</strong> 
+                        (Tronçons, Sociétés, Gendarmerie, Patrouilleurs, Protection Civile, Fourgon Mortelle) 
+                        dans un fichier <strong>config.json</strong>.
+                    </p>
+                    <button onclick="Parametres.exporterConfigJSON()" 
+                            style="background:#6c5ce7; color:white; border:none; padding:12px 24px; border-radius:8px; font-weight:600; cursor:pointer; font-size:14px; display:inline-flex; align-items:center; gap:8px;">
+                        📤 Exporter config.json
+                    </button>
                 </div>
-                
-                <!-- ====== 2. TRONÇONS ====== -->
-                <div class="param-card">
-                    <h3>📍 Tronçons</h3>
+            </div>
+            
+            <!-- ====== CONTENEUR PARAMÈTRES ====== -->
+            <div class="parametres-container">
+            
+            <!-- ====== 1. TRONÇONS ====== -->
+            <div class="param-card" data-card="troncons">
+                <h3 onclick="Parametres.basculerCard('troncons')">
+                    <span>📍 Tronçons</span>
+                    <span class="toggle-icon">▼</span>
+                </h3>
+                <div class="param-body">
                     <div class="param-actions">
                         <button class="btn-add" onclick="Parametres.ajouterTroncon()">➕ Ajouter</button>
                         <button class="btn-save" onclick="Parametres.sauvegarderTroncons()">💾 Sauvegarder</button>
@@ -1063,25 +1059,21 @@
                     <div class="table-container" id="tronconsTable">
                         <table>
                             <thead>
-                                <tr>
-                                    <th>Tronçon</th>
-                                    <th>Direction</th>
-                                    <th>Axe</th>
-                                    <th>Du PK</th>
-                                    <th>Au PK</th>
-                                    <th>Action</th>
-                                </tr>
+                                <tr><th>Tronçon</th><th>Axe</th><th>Du PK</th><th>Au PK</th><th>Action</th></tr>
                             </thead>
-                            <tbody id="tronconsBody">
-                                <!-- Rempli par JavaScript -->
-                            </tbody>
+                            <tbody id="tronconsBody"></tbody>
                         </table>
                     </div>
                 </div>
-                
-                <!-- ====== 3. SOCIÉTÉS DÉPANNAGE ====== -->
-                <div class="param-card">
-                    <h3>🚛 Sociétés Dépannage</h3>
+            </div>
+            
+            <!-- ====== 2. SOCIÉTÉS DÉPANNAGE ====== -->
+            <div class="param-card" data-card="societes">
+                <h3 onclick="Parametres.basculerCard('societes')">
+                    <span>🚛 Sociétés Dépannage</span>
+                    <span class="toggle-icon">▼</span>
+                </h3>
+                <div class="param-body">
                     <div class="param-actions">
                         <button class="btn-add" onclick="Parametres.ajouterSociete()">➕ Ajouter</button>
                         <button class="btn-save" onclick="Parametres.sauvegarderSocietes()">💾 Sauvegarder</button>
@@ -1089,27 +1081,21 @@
                     <div class="table-container" id="societesTable">
                         <table>
                             <thead>
-                                <tr>
-                                    <th>Société</th>
-                                    <th>Direction</th>
-                                    <th>Axe</th>
-                                    <th>Du PK</th>
-                                    <th>Au PK</th>
-                                    <th>Date entrée</th>
-                                    <th>Date sortie</th>
-                                    <th>Action</th>
-                                </tr>
+                                <tr><th>Société</th><th>Axe</th><th>Du PK</th><th>Au PK</th><th>Date entrée</th><th>Date sortie</th><th>Action</th></tr>
                             </thead>
-                            <tbody id="societesBody">
-                                <!-- Rempli par JavaScript -->
-                            </tbody>
+                            <tbody id="societesBody"></tbody>
                         </table>
                     </div>
                 </div>
-                
-                <!-- ====== 4. GENDARMERIE ROYALE ====== -->
-                <div class="param-card">
-                    <h3>🚔 Gendarmerie Royale</h3>
+            </div>
+            
+            <!-- ====== 3. GENDARMERIE ROYALE ====== -->
+            <div class="param-card" data-card="gendarmerie">
+                <h3 onclick="Parametres.basculerCard('gendarmerie')">
+                    <span>🚔 Gendarmerie Royale</span>
+                    <span class="toggle-icon">▼</span>
+                </h3>
+                <div class="param-body">
                     <div class="param-actions">
                         <button class="btn-add" onclick="Parametres.ajouterGendarmerie()">➕ Ajouter</button>
                         <button class="btn-save" onclick="Parametres.sauvegarderGendarmerie()">💾 Sauvegarder</button>
@@ -1117,24 +1103,82 @@
                     <div class="table-container" id="gendarmerieTable">
                         <table>
                             <thead>
-                                <tr>
-                                    <th>PMA</th>
-                                    <th>Direction</th>
-                                    <th>Axe</th>
-                                    <th>Du PK</th>
-                                    <th>Au PK</th>
-                                    <th>Action</th>
-                                </tr>
+                                <tr><th>PMA</th><th>Axe</th><th>Du PK</th><th>Au PK</th><th>Action</th></tr>
                             </thead>
-                            <tbody id="gendarmerieBody">
-                                <!-- Rempli par JavaScript -->
-                            </tbody>
+                            <tbody id="gendarmerieBody"></tbody>
                         </table>
                     </div>
                 </div>
-                
             </div>
-        </section>
+            
+            <!-- ====== 4. PATROUILLEURS ====== -->
+            <div class="param-card" data-card="patrouilleurs">
+                <h3 onclick="Parametres.basculerCard('patrouilleurs')">
+                    <span>👮 Patrouilleurs</span>
+                    <span class="toggle-icon">▼</span>
+                </h3>
+                <div class="param-body">
+                    <div class="param-actions">
+                        <button class="btn-add" onclick="Parametres.ajouterPatrouilleur()">➕ Ajouter</button>
+                        <button class="btn-save" onclick="Parametres.sauvegarderPatrouilleurs()">💾 Sauvegarder</button>
+                    </div>
+                    <div class="table-container" id="patrouilleursTable">
+                        <table>
+                            <thead>
+                                <tr><th>Tronçon</th><th>Axe</th><th>Du PK</th><th>Au PK</th><th>Action</th></tr>
+                            </thead>
+                            <tbody id="patrouilleursBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ====== 5. PROTECTION CIVILE ====== -->
+            <div class="param-card" data-card="protectionCivile">
+                <h3 onclick="Parametres.basculerCard('protectionCivile')">
+                    <span>🚑 Protection Civile</span>
+                    <span class="toggle-icon">▼</span>
+                </h3>
+                <div class="param-body">
+                    <div class="param-actions">
+                        <button class="btn-add" onclick="Parametres.ajouterProtectionCivile()">➕ Ajouter</button>
+                        <button class="btn-save" onclick="Parametres.sauvegarderProtectionCivile()">💾 Sauvegarder</button>
+                    </div>
+                    <div class="table-container" id="protectionCivileTable">
+                        <table>
+                            <thead>
+                                <tr><th>Tronçon</th><th>Axe</th><th>Du PK</th><th>Au PK</th><th>Action</th></tr>
+                            </thead>
+                            <tbody id="protectionCivileBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ====== 6. FOURGON MORTELLE ====== -->
+            <div class="param-card" data-card="fourgonMortelle">
+                <h3 onclick="Parametres.basculerCard('fourgonMortelle')">
+                    <span>⚰️ Fourgon Mortelle</span>
+                    <span class="toggle-icon">▼</span>
+                </h3>
+                <div class="param-body">
+                    <div class="param-actions">
+                        <button class="btn-add" onclick="Parametres.ajouterFourgonMortelle()">➕ Ajouter</button>
+                        <button class="btn-save" onclick="Parametres.sauvegarderFourgonMortelle()">💾 Sauvegarder</button>
+                    </div>
+                    <div class="table-container" id="fourgonMortelleTable">
+                        <table>
+                            <thead>
+                                <tr><th>Tronçon</th><th>Axe</th><th>Du PK</th><th>Au PK</th><th>Action</th></tr>
+                            </thead>
+                            <tbody id="fourgonMortelleBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+</section>
 
         <!-- ====== FOOTER ====== -->
         <footer class="main-footer">
