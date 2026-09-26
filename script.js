@@ -1652,10 +1652,11 @@ const Analyse = {
             html += `</div>`;
             top += 20;
             
+             // ===== Barre Croissant =====
             // ===== Barre Croissant =====
-            html += `<div style="position:absolute; top:${top}px; left:40px; right:40px; height:55px; background:rgba(208,216,224,0.6); border-radius:6px; border:1px solid rgba(176,184,192,0.6); overflow:hidden;">`;
-            // Ligne médiane discontinue (joli effet route)
-            html += `<div style="position:absolute; top:50%; left:0; right:0; height:2px; margin-top:-1px; background-image:linear-gradient(to right, #fff 50%, transparent 50%); background-size:20px 2px; background-repeat:repeat-x;"></div>`;
+            html += `<div style="position:absolute; top:${top}px; left:40px; right:40px; height:85px; background:rgba(208,216,224,0.6); border-radius:8px; border:1px solid rgba(176,184,192,0.6); overflow:hidden;">`;
+            // Ligne médiane discontinue (effet route)
+            html += `<div style="position:absolute; top:50%; left:0; right:0; height:3px; margin-top:-1.5px; background-image:linear-gradient(to right, #fff 50%, transparent 50%); background-size:24px 3px; background-repeat:repeat-x;"></div>`;
             // Lignes verticales aux frontières des tronçons
             for (let i = 0; i < axeData.troncons.length - 1; i++) {
                 const boundary = axeData.troncons[i].max;
@@ -1663,22 +1664,22 @@ const Analyse = {
                 html += `<div style="position:absolute; left:${posPct}%; top:0; bottom:0; width:1px; background:rgba(45,125,184,0.35);"></div>`;
             }
             html += `</div>`;
-            html += `<div style="position:absolute; top:${top - 13}px; left:40px; font-size:10px; color:#2d7db8; font-weight:bold; z-index:6;">⬆️ ${axeName} Croissant</div>`;
-            html += `<div id="pkPoints-${axeIdx}-croissant" style="position:absolute; top:${top}px; left:40px; right:40px; height:75px; z-index:5;"></div>`;
-            top += 78;
+            html += `<div style="position:absolute; top:${top - 14}px; left:40px; font-size:11px; color:#2d7db8; font-weight:bold; z-index:6;">⬆️ ${axeName} Croissant</div>`;
+            html += `<div id="pkPoints-${axeIdx}-croissant" style="position:absolute; top:${top}px; left:40px; right:40px; height:110px; z-index:5;"></div>`;
+            top += 108;
             
             // ===== Barre Décroissant =====
-            html += `<div style="position:absolute; top:${top}px; left:40px; right:40px; height:55px; background:rgba(208,216,224,0.6); border-radius:6px; border:1px solid rgba(176,184,192,0.6); overflow:hidden;">`;
-            html += `<div style="position:absolute; top:50%; left:0; right:0; height:2px; margin-top:-1px; background-image:linear-gradient(to right, #fff 50%, transparent 50%); background-size:20px 2px; background-repeat:repeat-x;"></div>`;
+            html += `<div style="position:absolute; top:${top}px; left:40px; right:40px; height:85px; background:rgba(208,216,224,0.6); border-radius:8px; border:1px solid rgba(176,184,192,0.6); overflow:hidden;">`;
+            html += `<div style="position:absolute; top:50%; left:0; right:0; height:3px; margin-top:-1.5px; background-image:linear-gradient(to right, #fff 50%, transparent 50%); background-size:24px 3px; background-repeat:repeat-x;"></div>`;
             for (let i = 0; i < axeData.troncons.length - 1; i++) {
                 const boundary = axeData.troncons[i].max;
                 const posPct = ((boundary - axeData.min) / range) * 100;
                 html += `<div style="position:absolute; left:${posPct}%; top:0; bottom:0; width:1px; background:rgba(45,125,184,0.35);"></div>`;
             }
             html += `</div>`;
-            html += `<div style="position:absolute; top:${top - 13}px; left:40px; font-size:10px; color:#2d7db8; font-weight:bold; z-index:6;">⬇️ ${axeName} décroissant</div>`;
-            html += `<div id="pkPoints-${axeIdx}-decroissant" style="position:absolute; top:${top}px; left:40px; right:40px; height:75px; z-index:5;"></div>`;
-            top += 85;
+            html += `<div style="position:absolute; top:${top - 14}px; left:40px; font-size:11px; color:#2d7db8; font-weight:bold; z-index:6;">⬇️ ${axeName} décroissant</div>`;
+            html += `<div id="pkPoints-${axeIdx}-decroissant" style="position:absolute; top:${top}px; left:40px; right:40px; height:110px; z-index:5;"></div>`;
+            top += 115;
         });
         
         // Légende
@@ -1786,7 +1787,7 @@ const Analyse = {
             return 0;
         }
         
-        const baseTop = 50;
+        const baseTop = 40;
         let html = '';
         
         const pointsParPK = {};
@@ -1803,7 +1804,7 @@ const Analyse = {
             
             accidents.forEach((d, index) => {
                 const niveau = index % 3;
-                const decalage = (niveau - 1) * 15;
+                const decalage = (niveau - 1) * 20;
                 const topPosition = baseTop + decalage;
                 
                 const tues = parseInt(d['_total_tues'] || 0);
@@ -3146,6 +3147,10 @@ const doughnutExternalLabelsPlugin = {
         const dataset = chart.data.datasets[0];
         const total = dataset.data.reduce((a, b) => a + (b || 0), 0);
         if (total === 0) return;
+        // ✅ Adapter à la taille de l'écran
+        const isMobile = window.innerWidth <= 768;
+        const elbowLength = isMobile ? 22 : 40;
+        const fontSizes = isMobile ? '600 10px "Segoe UI", Arial, sans-serif' : '600 12px "Segoe UI", Arial, sans-serif';
         
         chart.data.labels.forEach(function(label, i) {
             const value = dataset.data[i] || 0;
@@ -3172,7 +3177,6 @@ const doughnutExternalLabelsPlugin = {
             
             // Point final (aligné horizontalement)
             const isRight = cos >= 0;
-            const elbowLength = 40;
             const x3 = isRight ? x2 + elbowLength : x2 - elbowLength;
             const y3 = y2;
             
@@ -3201,7 +3205,7 @@ const doughnutExternalLabelsPlugin = {
             const text = label + ' : ' + value + ' (' + percentage + '%)';
             
             ctx.fillStyle = '#1a3a5c';
-            ctx.font = '600 12px "Segoe UI", Arial, sans-serif';
+            ctx.font = fontSizes;
             ctx.textBaseline = 'middle';
             ctx.textAlign = isRight ? 'left' : 'right';
             ctx.fillText(text, x3 + (isRight ? 6 : -6), y3);
@@ -4943,6 +4947,14 @@ function changerPage(page) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const pageEl = document.getElementById('page-' + page);
     if (pageEl) pageEl.classList.add('active');
+     // ✅ Mode accueil (mobile) : cache la sidebar
+    if (window.innerWidth <= 768) {
+        if (page === 'accueil') {
+            document.body.classList.add('accueil-mode');
+        } else {
+            document.body.classList.remove('accueil-mode');
+        }
+    }
     
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector('.nav-btn[data-page="' + page + '"]');
@@ -4989,6 +5001,14 @@ function changerPage(page) {
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('📄 DOM chargé');
+    // ✅ Sur mobile : démarrer sur la page d'accueil
+    if (window.innerWidth <= 768) {
+        // Retirer "active" de la page chargement
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        const accueil = document.getElementById('page-accueil');
+        if (accueil) accueil.classList.add('active');
+        document.body.classList.add('accueil-mode');
+    }
     // ====== Initialiser le label de l'année ======
     mettreAJourAnneeLabel();
 
